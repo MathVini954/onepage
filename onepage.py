@@ -97,39 +97,33 @@ st.markdown('<p class="main-header">🏗️ Dashboard de Obras</p>', unsafe_allo
 
 # -------------------- Carregar dados --------------------
 df = pd.read_excel(file_path, sheet_name=selected_sheet)
+df_clean = df.iloc[:, [0, 1]].dropna()
+df_clean.columns = ['Metrica', 'Valor']
 
-# Procurar a primeira linha que contenha 'AC' ou outra métrica conhecida para definir o cabeçalho correto
-header_row = 0
-for i, row in df.iterrows():
-    if row.str.contains('AC', na=False).any():
-        header_row = i
-        break
+dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()}
 
-# Ler novamente a planilha usando a linha correta como cabeçalho
-df = pd.read_excel(file_path, sheet_name=selected_sheet, header=header_row)
-
-# Normalizar nomes das colunas (coluna de métrica + coluna de valor)
-df.columns = [str(col).strip() for col in df.columns]
-
-# Garantir que temos as duas colunas: Métrica e Valor
-if len(df.columns) >= 2:
-    df_clean = df.iloc[:, [0, 1]].dropna()
-    df_clean.columns = ['Metrica', 'Valor']
-else:
-    st.error("Planilha não possui colunas suficientes para Métrica e Valor.")
-    st.stop()
-
-# Função para normalizar chaves (remove espaços, minúsculas, substitui ² por 2)
-def normalize_key(key: str) -> str:
-    return str(key).strip().lower().replace(" ", "").replace("²", "2")
-
-# Criar dicionário de métricas
-dados = {normalize_key(row['Metrica']): row['Valor'] for _, row in df_clean.iterrows()}
-
-# Função para pegar valor pelo nome da métrica
 def get_value(key, default="N/A"):
-    return dados.get(normalize_key(key), default)
+    return dados.get(key, default)
 
+def format_money(value):
+    if isinstance(value, (int, float)):
+        return f"R$ {value:,.0f}".replace(',', '.')
+    return str(value)
+
+def format_percent(value):
+    if isinstance(value, (int, float)) and value <= 1:
+        return f"{value*100:.1f}%"
+    elif isinstance(value, (int, float)):
+        return f"{value:.1f}%"
+    return str(value)
+
+def to_float(val):
+    if isinstance(val, str):
+        try:
+            return float(val.replace('R$', '').replace('.', '').replace(',', '.'))
+        except:
+            return 0
+    return val if isinstance(val, (int,float)) else 0
 
 # -------------------- Logo da obra --------------------
 obra_logo_path = f"{selected_sheet}.png"
