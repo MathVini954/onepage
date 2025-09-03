@@ -129,22 +129,24 @@ obra_logo_path = f"{selected_sheet}.png"
 if os.path.exists(obra_logo_path):
     st.image(obra_logo_path, width=350)
 
-# -------------------- Métricas principais --------------------
-st.markdown('<p class="sub-header">📊 Dados do Empreendimento</p>', unsafe_allow_html=True)
-
-# Primeira linha
+# -------------------- Métricas Principais --------------------
+st.markdown('<p class="sub-header">📊 Métricas Principais</p>', unsafe_allow_html=True)
 cols = st.columns(4)
-cols[0].markdown(f'<div class="metric-card"><p class="metric-title">AC(m²)</p><p class="metric-value">{get_value("AC(m²)")}</p></div>', unsafe_allow_html=True)
-cols[1].markdown(f'<div class="metric-card"><p class="metric-title">AP(m²)</p><p class="metric-value">{get_value("AP(m²)")}</p></div>', unsafe_allow_html=True)
-cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Ef</p><p class="metric-value">{format_percent(get_value("Ef"))}</p></div>', unsafe_allow_html=True)
-cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Total Unidades</p><p class="metric-value">{get_value("Total Unidades")}</p></div>', unsafe_allow_html=True)
 
-# Segunda linha
+cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Área Construída (m²)</p><p class="metric-value">{get_value("Área Construída (m²) atual")}</p></div>', unsafe_allow_html=True)
+cols[1].markdown(f'<div class="metric-card"><p class="metric-title">Área Privativa (m²)</p><p class="metric-value">{get_value("Área Privativa (m²)")}</p></div>', unsafe_allow_html=True)
+cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Eficiência</p><p class="metric-value">{get_value("Eficiência")}</p></div>', unsafe_allow_html=True)
+cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Unidades</p><p class="metric-value">{get_value("Unidades")}</p></div>', unsafe_allow_html=True)
+
+
+# -------------------- Segunda linha de métricas --------------------
 cols2 = st.columns(4)
-cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentab. Viabilidade"))}</p></div>', unsafe_allow_html=True)
-cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Projetada</p><p class="metric-value">{format_percent(get_value("Rentab. Projetada"))}</p></div>', unsafe_allow_html=True)
-cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Atual AC</p><p class="metric-value">{format_money(get_value("Custo Atual AC"))}</p></div>', unsafe_allow_html=True)
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Atual AP</p><p class="metric-value">{format_money(get_value("Custo Atual AP"))}</p></div>', unsafe_allow_html=True)
+
+cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentabilidade Viabilidade"))}</p></div>', unsafe_allow_html=True)
+cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Projetada</p><p class="metric-value">{format_percent(get_value("Rentabilidade Projetada"))}</p></div>', unsafe_allow_html=True)
+cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Construída</p><p class="metric-value">{format_money(get_value("Custo Área Construída"))}</p></div>', unsafe_allow_html=True)
+cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Privativa</p><p class="metric-value">{format_money(get_value("Custo Área Privativa"))}</p></div>', unsafe_allow_html=True)
+
 
 # -------------------- Análise Financeira --------------------
 st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
