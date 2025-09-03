@@ -1,16 +1,16 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import os
 
 st.set_page_config(page_title="ONE_PAGE Dashboard", page_icon="🏗️", layout="wide")
 
-# ===== Estilo CSS =====
+# ===== CSS =====
 st.markdown("""
 <style>
     body { background-color: #1e1e2f; color: #fff; }
-    .big-title { font-size:38px !important; font-weight:bold; text-align:center; margin-bottom:20px; color:#fff; }
-    .card { padding:20px; border-radius:15px; background-color:#2e2e3e; box-shadow:0px 4px 15px rgba(0,0,0,0.5); text-align:center; margin-bottom:20px; }
+    .big-title { font-size:36px !important; font-weight:bold; text-align:center; margin-bottom:20px; color:#fff; }
+    .card { padding:20px; border-radius:15px; background-color:#2e2e3e; 
+            box-shadow:0px 4px 15px rgba(0,0,0,0.5); text-align:center; margin-bottom:20px; }
     .card h4 { margin-bottom:10px; color:#fff; }
     .card p { font-size:16px; color:#fff; font-weight:bold; }
 </style>
@@ -68,13 +68,6 @@ else:
     # ===== Título =====
     st.markdown(f"<p class='big-title'>📊 Dashboard - {obra_escolhida}</p>", unsafe_allow_html=True)
 
-    # ===== Cards principais =====
-    col1, col2, col3, col4 = st.columns(4)
-    col1.markdown(f"<div class='card'><h4>AC (m²)</h4><p>{indicadores.get('AC(m²)','-')}</p></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='card'><h4>AP (m²)</h4><p>{indicadores.get('AP(m²)','-')}</p></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card'><h4>Efetivo</h4><p>{format_percent(indicadores.get('Ef',0))}</p></div>", unsafe_allow_html=True)
-    col4.markdown(f"<div class='card'><h4>Total Unidades</h4><p>{indicadores.get('Total Unidades','-')}</p></div>", unsafe_allow_html=True)
-
     # ===== Avanço físico =====
     st.markdown("### 📈 Avanço Físico")
     planejado = indicadores.get("Avanço Físico Planejado",0)
@@ -91,11 +84,14 @@ else:
     st.markdown(f"""
     <div style='position: relative; background-color: #555; border-radius: 15px; height: 30px;'>
         <!-- Preenchimento Real -->
-        <div style='width:{real*100}%; background-color:#4caf50; height:100%; border-radius:15px; text-align:center; color:white; font-weight:bold; line-height:30px;'>
+        <div style='width:{real*100}%; background-color:#4caf50; height:100%; 
+                    border-radius:15px; text-align:center; color:white; 
+                    font-weight:bold; line-height:30px;'>
             {format_percent(real)}
         </div>
         <!-- Marcador Planejado -->
-        <div style='position: absolute; left:{planejado*100}%; top:0; bottom:0; width:3px; background-color:red; border-radius:2px;'></div>
+        <div style='position: absolute; left:{planejado*100}%; top:0; bottom:0; 
+                    width:3px; background-color:red; border-radius:2px;'></div>
     </div>
     """, unsafe_allow_html=True)
 
