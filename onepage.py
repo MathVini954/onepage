@@ -79,7 +79,7 @@ st.markdown("""
 # -------------------- Sidebar (filtro + logo empresa) --------------------
 logo_empresa_path = "empresa_logo.png"
 if os.path.exists(logo_empresa_path):
-    st.sidebar.image(logo_empresa_path, width=200)
+    st.sidebar.image(logo_empresa_path, width=350)
 
 st.sidebar.markdown("### 📂 Selecione a Obra")
 
