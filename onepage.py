@@ -102,14 +102,3 @@ else:
     col2.markdown(f"<div class='card'><h4>Desembolso</h4><p>{format_money(indicadores.get('Desembolso',0))}</p></div>", unsafe_allow_html=True)
     col3.markdown(f"<div class='card'><h4>Saldo</h4><p>{format_money(indicadores.get('Saldo',0))}</p></div>", unsafe_allow_html=True)
     col4.markdown(f"<div class='card'><h4>Índice Econômico</h4><p>{format_percent(indicadores.get('Índice Econômico',0))}</p></div>", unsafe_allow_html=True)
-
-    # ===== Gráfico de colunas (exemplo simples) =====
-    st.markdown("### 📊 Produção Mensal")
-    df_col = pd.DataFrame({
-        "Mês": ["Jan","Fev","Mar","Abr","Mai","Jun"],
-        "Planejado": [80,85,90,92,95,98],
-        "Real": [78,82,87,89,91,92]
-    })
-    fig = px.bar(df_col, x="Mês", y=["Planejado","Real"], barmode="group",
-                 color_discrete_sequence=["#ff4d4d","#4caf50"])
-    st.plotly_chart(fig, use_container_width=True)
