@@ -133,9 +133,19 @@ cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Viab
 # -------------------- Análise Financeira --------------------
 st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
 
-orc_base = get_value("Orçamento Base", 0)
-orc_reaj = get_value("Orçamento Reajustado", 0)
-custo_final = get_value("Custo Final", 0)
+st.markdown('<div class="section-container">', unsafe_allow_html=True)
+cols_fin = st.columns(3)
+cols_fin[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
+cols_fin[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
+cols_fin[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value("Custo Final"))}</p></div>', unsafe_allow_html=True)
+
+cols_fin2 = st.columns(4)
+cols_fin2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{get_value("Desvio")}</p></div>', unsafe_allow_html=True)
+cols_fin2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
+cols_fin2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
+cols_fin2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
 
 # Conversão para float
 def to_float(val):
