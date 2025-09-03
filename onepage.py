@@ -168,9 +168,11 @@ st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=
 
 av_real_num = to_float(get_value("Avanço Físico Real", 0))
 av_plan_num = to_float(get_value("Avanço Físico Planejado", 0))
+aderencia_num = to_float(get_value("Aderência Física", 0))
 
 if av_real_num <= 1: av_real_num *= 100
 if av_plan_num <= 1: av_plan_num *= 100
+if aderencia_num <= 1: aderencia_num *= 100
 
 st.markdown(f"""
 <div class="progress-wrapper">
@@ -179,6 +181,7 @@ st.markdown(f"""
     </div>
 </div>
 <p style="color:#EF4444;font-weight:600;">Planejado: {av_plan_num:.1f}%</p>
+<p style="color:#10B981;font-weight:600;">Aderência: {aderencia_num:.1f}%</p>
 """, unsafe_allow_html=True)
 
 # -------------------- Timeline --------------------
