@@ -6,7 +6,7 @@ import os
 
 # -------------------- Configuração da página --------------------
 st.set_page_config(
-    page_title="Dashboard de Obras",
+    page_title="ONE PAGEs",
     page_icon="🏗️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -271,6 +271,3 @@ else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
 
 
-# -------------------- Footer --------------------
-st.markdown("---")
-st.markdown("<div style='text-align: center; color: #6B7280;'>Dashboard atualizado em tempo real | Dados da obra selecionada</div>", unsafe_allow_html=True)
