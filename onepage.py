@@ -206,8 +206,8 @@ def format_month_year_pt(date_val):
 
 # Pegar datas
 inicio = get_value("Início", None)
-tend = get_value("Tend", None)
-prazo_concl = get_value("Prazo Concl.", None)
+tend = get_value("Tendência", None)
+prazo_concl = get_value("Prazo Conclusão", None)
 prazo_cliente = get_value("Prazo Cliente", None)
 
 # Criar cards para cada data
