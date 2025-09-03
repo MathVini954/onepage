@@ -135,7 +135,7 @@ cols = st.columns(4)
 
 cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Área Construída (m²)</p><p class="metric-value">{get_value("Área Construída (m²) atual")}</p></div>', unsafe_allow_html=True)
 cols[1].markdown(f'<div class="metric-card"><p class="metric-title">Área Privativa (m²)</p><p class="metric-value">{get_value("Área Privativa (m²)")}</p></div>', unsafe_allow_html=True)
-cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Eficiência</p><p class="metric-value">{get_value("Eficiência")}</p></div>', unsafe_allow_html=True)
+cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Eficiência</p><p class="metric-value">{format_percent(get_value("Eficiência"))}</p></div>',unsafe_allow_html=True)
 cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Unidades</p><p class="metric-value">{get_value("Unidades")}</p></div>', unsafe_allow_html=True)
 
 
