@@ -1,104 +1,292 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
+from datetime import datetime
 import os
 
-st.set_page_config(page_title="ONE_PAGE Dashboard", page_icon="🏗️", layout="wide")
+# -------------------- Configuração da página --------------------
+st.set_page_config(
+    page_title="Dashboard de Obras",
+    page_icon="🏗️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# ===== CSS =====
+# -------------------- Estilos CSS --------------------
 st.markdown("""
 <style>
-    body { background-color: #1e1e2f; color: #fff; }
-    .big-title { font-size:36px !important; font-weight:bold; text-align:center; margin-bottom:20px; color:#fff; }
-    .card { padding:20px; border-radius:15px; background-color:#2e2e3e; 
-            box-shadow:0px 4px 15px rgba(0,0,0,0.5); text-align:center; margin-bottom:20px; }
-    .card h4 { margin-bottom:10px; color:#fff; }
-    .card p { font-size:16px; color:#fff; font-weight:bold; }
+.main-header {
+    font-size: 2.8rem;
+    color: #1E3A8A;
+    font-weight: 800;
+    margin-bottom: 2rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 3px solid #3B82F6;
+}
+.sub-header {
+    font-size: 1.8rem;
+    color: #374151;
+    font-weight: 700;
+    margin: 2rem 0 1.5rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #E5E7EB;
+}
+.metric-card {
+    background-color: #1E293B;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    height: 100%;
+    border-left: 5px solid #3B82F6;
+    margin-bottom: 1rem;
+}
+.metric-title {
+    font-size: 1rem;
+    color: #93C5FD;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+.metric-value {
+    font-size: 1.6rem;
+    color: #FFFFFF;
+    font-weight: 800;
+}
+.section-container {
+    background-color: #0F172A;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+}
+.progress-container {
+    background-color: #1E293B;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
+# -------------------- Cabeçalho com logo --------------------
+logo_empresa_path = "empresa_logo.png"
+if os.path.exists(logo_empresa_path):
+    st.image(logo_empresa_path, width=150)
 
-# ===== Funções auxiliares =====
-def format_money(val):
-    try:
-        return f"R$ {float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return str(val)
+st.markdown('<p class="main-header">🏗️ Dashboard de Obras</p>', unsafe_allow_html=True)
 
-def format_percent(val):
-    try:
-        return f"{float(val)*100:.1f}%"
-    except:
-        return str(val)
+# -------------------- Upload ou arquivo fixo --------------------
+file_path = "ONE_PAGE.xlsx"
+if not os.path.exists(file_path):
+    st.error("❌ Arquivo ONE_PAGE.xlsx não encontrado no diretório!")
+    st.stop()
 
+excel_file = pd.ExcelFile(file_path)
+sheet_names = excel_file.sheet_names
+selected_sheet = st.selectbox("Escolha a obra (aba da planilha):", sheet_names)
 
-# ===== Carregar planilha =====
-uploaded_file = "ONE_PAGE.xlsx"
-if not os.path.exists(uploaded_file):
-    st.warning("📥 Coloque o arquivo 'ONE_PAGE.xlsx' no diretório do app.")
-else:
-    xls = pd.ExcelFile(uploaded_file)
+# -------------------- Carregar dados --------------------
+df = pd.read_excel(file_path, sheet_name=selected_sheet)
+df_clean = df.iloc[:, [0, 1]].dropna()
+df_clean.columns = ['Metrica', 'Valor']
 
-    # Sidebar - filtro de obra
-    st.sidebar.image("empresa_logo.png", width=200)
-    obra_escolhida = st.sidebar.selectbox("🏢 Selecione a Obra", xls.sheet_names)
+dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()}
 
-    # Logo da obra
-    obra_logo = f"{obra_escolhida}.png"
-    if os.path.exists(obra_logo):
-        st.image(obra_logo, width=200)
+def get_value(key, default="N/A"):
+    return dados.get(key, default)
 
-    # Ler aba da obra
-    df = pd.read_excel(uploaded_file, sheet_name=obra_escolhida, usecols="A:B", header=None, dtype=str)
-    df[0] = df[0].str.strip()
-    df[1] = df[1].str.strip()
+def format_money(value):
+    if isinstance(value, (int, float)):
+        return f"R$ {value:,.0f}".replace(',', '.')
+    return str(value)
 
-    indicadores = {}
-    for i in range(len(df)):
-        key = df.iloc[i,0]
-        value = df.iloc[i,1]
+def format_percent(value):
+    if isinstance(value, (int, float)) and value <= 1:
+        return f"{value*100:.1f}%"
+    elif isinstance(value, (int, float)):
+        return f"{value:.1f}%"
+    return str(value)
+
+# -------------------- Logo da obra --------------------
+obra_logo_path = f"{selected_sheet}.png"
+if os.path.exists(obra_logo_path):
+    st.image(obra_logo_path, width=120)
+
+# -------------------- Métricas principais --------------------
+st.markdown('<p class="sub-header">📊 Métricas Principais</p>', unsafe_allow_html=True)
+cols = st.columns(4)
+cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Total Unidades</p><p class="metric-value">{get_value("Total Unidades")}</p></div>', unsafe_allow_html=True)
+cols[1].markdown(f'<div class="metric-card"><p class="metric-title">AC(m²)</p><p class="metric-value">{get_value("AC(m²)")}</p></div>', unsafe_allow_html=True)
+cols[2].markdown(f'<div class="metric-card"><p class="metric-title">AP(m²)</p><p class="metric-value">{get_value("AP(m²)")}</p></div>', unsafe_allow_html=True)
+cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentab. Viabilidade"))}</p></div>', unsafe_allow_html=True)
+
+# -------------------- Gráfico Scatter Plot (Orçamento) --------------------
+st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
+
+orc_base = get_value("Orçamento Base", 0)
+orc_reaj = get_value("Orçamento Reajustado", 0)
+custo_final = get_value("Custo Final", 0)
+
+# Converter para float se necessário
+for var_name in ["orc_base", "orc_reaj", "custo_final"]:
+    val = locals()[var_name]
+    if isinstance(val, str):
         try:
-            value = float(value)
+            val = float(val.replace('R$', '').replace('.', '').replace(',', '.'))
+            locals()[var_name] = val
         except:
-            try:
-                value = pd.to_datetime(value)
-            except:
-                pass
-        indicadores[key] = value
+            locals()[var_name] = 0
 
-    # ===== Título =====
-    st.markdown(f"<p class='big-title'>📊 Dashboard - {obra_escolhida}</p>", unsafe_allow_html=True)
+fig_scatter = go.Figure()
+# Linha de referência real=planejado
+max_val = max(orc_base, orc_reaj, custo_final) * 1.1
+fig_scatter.add_trace(go.Scatter(
+    x=[0, max_val],
+    y=[0, max_val],
+    mode='lines',
+    line=dict(color='gray', dash='dash'),
+    showlegend=False
+))
+# Pontos reais
+fig_scatter.add_trace(go.Scatter(
+    x=[orc_base, orc_reaj, custo_final],
+    y=[orc_base, orc_reaj, custo_final],
+    mode='markers+text',
+    marker=dict(size=15, color='#3B82F6'),
+    text=['Base', 'Reajustado', 'Custo Final'],
+    textposition='top center',
+    name='Real'
+))
 
-    # ===== Avanço físico =====
-    st.markdown("### 📈 Avanço Físico")
-    planejado = indicadores.get("Avanço Físico Planejado",0)
-    real = indicadores.get("Avanço Físico Real",0)
-    aderencia = indicadores.get("Aderência Física",0)
+fig_scatter.update_layout(
+    title='Planejado vs Real',
+    xaxis_title='Planejado (R$)',
+    yaxis_title='Real (R$)',
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='white'),
+    height=400
+)
+st.plotly_chart(fig_scatter, use_container_width=True)
 
-    st.markdown(
-        f"<p>Planejado: {format_percent(planejado)} | "
-        f"Real: {format_percent(real)} | "
-        f"Aderência: {format_percent(aderencia)}</p>",
-        unsafe_allow_html=True
+# -------------------- Caixa Financeira --------------------
+st.markdown('<div class="section-container">', unsafe_allow_html=True)
+cols_fin = st.columns(4)
+cols_fin[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{get_value("Desvio")}</p></div>', unsafe_allow_html=True)
+cols_fin[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
+cols_fin[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
+cols_fin[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# -------------------- Barra de progresso horizontal (Avanço Físico) --------------------
+st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
+
+av_real_num = get_value("Avanço Físico Real", 0)
+av_plan_num = get_value("Avanço Físico Planejado", 0)
+
+# Conversão simples
+for var_name in ["av_real_num", "av_plan_num"]:
+    val = locals()[var_name]
+    if isinstance(val, str):
+        try:
+            val = float(val.replace('%','').replace(',','.'))
+            locals()[var_name] = val
+        except:
+            locals()[var_name] = 0
+if av_real_num <= 1: av_real_num *= 100
+if av_plan_num <= 1: av_plan_num *= 100
+
+# Gráfico de barra horizontal
+fig_bar = go.Figure()
+fig_bar.add_trace(go.Bar(
+    y=['Avanço Físico'],
+    x=[av_real_num],
+    orientation='h',
+    marker=dict(color='#3B82F6', line=dict(color='#000', width=0)),
+    name='Real'
+))
+# Marcador planejado
+fig_bar.add_trace(go.Scatter(
+    y=['Avanço Físico'],
+    x=[av_plan_num],
+    mode='markers',
+    marker=dict(color='red', size=15, symbol='line-ns-open'),
+    name='Planejado'
+))
+fig_bar.update_layout(
+    xaxis=dict(range=[0,100], title='%', showgrid=False),
+    yaxis=dict(showticklabels=False),
+    height=150,
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    showlegend=True,
+    title='Avanço Real vs Planejado'
+)
+st.plotly_chart(fig_bar, use_container_width=True)
+
+# -------------------- Timeline --------------------
+st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
+inicio = get_value("Início", "N/A")
+tend = get_value("Tend", "N/A")
+prazo_concl = get_value("Prazo Concl.", "N/A")
+prazo_cliente = get_value("Prazo Cliente", "N/A")
+
+dates = [inicio, tend, prazo_concl, prazo_cliente]
+labels = ["Início", "Tendência", "Prazo Conclusão", "Prazo Cliente"]
+colors = ["#3B82F6", "#F59E0B", "#10B981", "#EF4444"]
+
+date_values = []
+for d in dates:
+    if isinstance(d, (datetime, pd.Timestamp)):
+        date_values.append(d)
+    elif isinstance(d, str) and d != "N/A":
+        try:
+            date_values.append(pd.to_datetime(d))
+        except:
+            date_values.append(None)
+    else:
+        date_values.append(None)
+
+valid_dates = [d for d in date_values if d is not None]
+if len(valid_dates) >= 2:
+    min_date = min(valid_dates)
+    max_date = max(valid_dates)
+    fig_timeline = go.Figure()
+    fig_timeline.add_trace(go.Scatter(
+        x=[min_date, max_date],
+        y=[0,0],
+        mode='lines',
+        line=dict(color='white', width=3),
+        showlegend=False
+    ))
+    for i, (date, label, color) in enumerate(zip(date_values, labels, colors)):
+        if date is not None:
+            fig_timeline.add_trace(go.Scatter(
+                x=[date],
+                y=[0],
+                mode='markers+text',
+                marker=dict(size=15, color=color),
+                text=[label],
+                textposition="top center",
+                name=label,
+                textfont=dict(color='white', size=12)
+            ))
+    fig_timeline.update_layout(
+        title='Cronograma da Obra',
+        showlegend=True,
+        height=300,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white'),
+        xaxis=dict(showgrid=False, zeroline=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
     )
+    st.plotly_chart(fig_timeline, use_container_width=True)
+else:
+    st.info("Não há datas suficientes para criar a linha do tempo.")
 
-    st.markdown(f"""
-    <div style='position: relative; background-color: #555; border-radius: 15px; height: 30px;'>
-        <!-- Preenchimento Real -->
-        <div style='width:{real*100}%; background-color:#4caf50; height:100%; 
-                    border-radius:15px; text-align:center; color:white; 
-                    font-weight:bold; line-height:30px;'>
-            {format_percent(real)}
-        </div>
-        <!-- Marcador Planejado -->
-        <div style='position: absolute; left:{planejado*100}%; top:0; bottom:0; 
-                    width:3px; background-color:red; border-radius:2px;'></div>
-    </div>
-    """, unsafe_allow_html=True)
+# -------------------- Visualizar dados --------------------
+with st.expander("🔍 Visualizar dados carregados"):
+    st.dataframe(df_clean, use_container_width=True)
 
-    # ===== Financeiro =====
-    st.markdown("### 💰 Indicadores Financeiros")
-    col1, col2, col3, col4 = st.columns(4)
-    col1.markdown(f"<div class='card'><h4>Desvio</h4><p>{format_percent(indicadores.get('Desvio',0))}</p></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='card'><h4>Desembolso</h4><p>{format_money(indicadores.get('Desembolso',0))}</p></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card'><h4>Saldo</h4><p>{format_money(indicadores.get('Saldo',0))}</p></div>", unsafe_allow_html=True)
-    col4.markdown(f"<div class='card'><h4>Índice Econômico</h4><p>{format_percent(indicadores.get('Índice Econômico',0))}</p></div>", unsafe_allow_html=True)
+# -------------------- Footer --------------------
+st.markdown("---")
+st.markdown("<div style='text-align: center; color: #6B7280;'>Dashboard atualizado em tempo real | Dados da obra selecionada</div>", unsafe_allow_html=True)
