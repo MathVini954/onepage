@@ -117,6 +117,14 @@ def format_percent(value):
         return f"{value:.1f}%"
     return str(value)
 
+def to_float(val):
+    if isinstance(val, str):
+        try:
+            return float(val.replace('R$', '').replace('.', '').replace(',', '.'))
+        except:
+            return 0
+    return val if isinstance(val, (int,float)) else 0
+
 # -------------------- Logo da obra --------------------
 obra_logo_path = f"{selected_sheet}.png"
 if os.path.exists(obra_logo_path):
@@ -124,11 +132,20 @@ if os.path.exists(obra_logo_path):
 
 # -------------------- Métricas principais --------------------
 st.markdown('<p class="sub-header">📊 Métricas Principais</p>', unsafe_allow_html=True)
+
+# Primeira linha
 cols = st.columns(4)
-cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Total Unidades</p><p class="metric-value">{get_value("Total Unidades")}</p></div>', unsafe_allow_html=True)
-cols[1].markdown(f'<div class="metric-card"><p class="metric-title">AC(m²)</p><p class="metric-value">{get_value("AC(m²)")}</p></div>', unsafe_allow_html=True)
-cols[2].markdown(f'<div class="metric-card"><p class="metric-title">AP(m²)</p><p class="metric-value">{get_value("AP(m²)")}</p></div>', unsafe_allow_html=True)
-cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentab. Viabilidade"))}</p></div>', unsafe_allow_html=True)
+cols[0].markdown(f'<div class="metric-card"><p class="metric-title">AC(m²)</p><p class="metric-value">{get_value("AC(m²)")}</p></div>', unsafe_allow_html=True)
+cols[1].markdown(f'<div class="metric-card"><p class="metric-title">AP(m²)</p><p class="metric-value">{get_value("AP(m²)")}</p></div>', unsafe_allow_html=True)
+cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Ef</p><p class="metric-value">{format_percent(get_value("Ef"))}</p></div>', unsafe_allow_html=True)
+cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Total Unidades</p><p class="metric-value">{get_value("Total Unidades")}</p></div>', unsafe_allow_html=True)
+
+# Segunda linha
+cols2 = st.columns(4)
+cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentab. Viabilidade"))}</p></div>', unsafe_allow_html=True)
+cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Projetada</p><p class="metric-value">{format_percent(get_value("Rentab. Projetada"))}</p></div>', unsafe_allow_html=True)
+cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Atual AC</p><p class="metric-value">{format_money(get_value("Custo Atual AC"))}</p></div>', unsafe_allow_html=True)
+cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Atual AP</p><p class="metric-value">{format_money(get_value("Custo Atual AP"))}</p></div>', unsafe_allow_html=True)
 
 # -------------------- Análise Financeira --------------------
 st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
@@ -145,7 +162,6 @@ cols_fin2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembo
 cols_fin2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
 cols_fin2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
-
 
 # -------------------- Barra de progresso (Avanço Físico) --------------------
 st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
