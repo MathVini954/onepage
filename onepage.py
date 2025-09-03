@@ -79,7 +79,7 @@ st.markdown("""
 # -------------------- Sidebar (filtro + logo empresa) --------------------
 logo_empresa_path = "empresa_logo.png"
 if os.path.exists(logo_empresa_path):
-    st.sidebar.image(logo_empresa_path, width=350)
+    st.sidebar.image(logo_empresa_path, width=200)
 
 st.sidebar.markdown("### 📂 Selecione a Obra")
 
@@ -128,7 +128,7 @@ def to_float(val):
 # -------------------- Logo da obra --------------------
 obra_logo_path = f"{selected_sheet}.png"
 if os.path.exists(obra_logo_path):
-    st.image(obra_logo_path, width=180)
+    st.image(obra_logo_path, width=350)
 
 # -------------------- Métricas principais --------------------
 st.markdown('<p class="sub-header">📊 Métricas Principais</p>', unsafe_allow_html=True)
