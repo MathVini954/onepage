@@ -22,6 +22,7 @@ st.markdown("""
     margin-bottom: 2rem;
     padding-bottom: 0.5rem;
     border-bottom: 3px solid #3B82F6;
+    text-align: center;
 }
 .sub-header {
     font-size: 1.8rem;
@@ -58,22 +59,30 @@ st.markdown("""
     margin-bottom: 2rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
 }
-.progress-container {
+.progress-wrapper {
     background-color: #1E293B;
-    border-radius: 0.5rem;
-    padding: 0.5rem;
+    border-radius: 20px;
+    padding: 5px;
+    width: 100%;
+}
+.progress-bar {
+    height: 30px;
+    border-radius: 20px;
+    text-align: center;
+    font-weight: bold;
+    color: white;
+    line-height: 30px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------- Cabeçalho com logo --------------------
+# -------------------- Sidebar (filtro + logo empresa) --------------------
 logo_empresa_path = "empresa_logo.png"
 if os.path.exists(logo_empresa_path):
-    st.image(logo_empresa_path, width=150)
+    st.sidebar.image(logo_empresa_path, width=200)
 
-st.markdown('<p class="main-header">🏗️ Dashboard de Obras</p>', unsafe_allow_html=True)
+st.sidebar.markdown("### 📂 Selecione a Obra")
 
-# -------------------- Upload ou arquivo fixo --------------------
 file_path = "ONE_PAGE.xlsx"
 if not os.path.exists(file_path):
     st.error("❌ Arquivo ONE_PAGE.xlsx não encontrado no diretório!")
@@ -81,7 +90,10 @@ if not os.path.exists(file_path):
 
 excel_file = pd.ExcelFile(file_path)
 sheet_names = excel_file.sheet_names
-selected_sheet = st.selectbox("Escolha a obra (aba da planilha):", sheet_names)
+selected_sheet = st.sidebar.selectbox("Obra:", sheet_names)
+
+# -------------------- Cabeçalho principal --------------------
+st.markdown('<p class="main-header">🏗️ Dashboard de Obras</p>', unsafe_allow_html=True)
 
 # -------------------- Carregar dados --------------------
 df = pd.read_excel(file_path, sheet_name=selected_sheet)
@@ -108,7 +120,7 @@ def format_percent(value):
 # -------------------- Logo da obra --------------------
 obra_logo_path = f"{selected_sheet}.png"
 if os.path.exists(obra_logo_path):
-    st.image(obra_logo_path, width=120)
+    st.image(obra_logo_path, width=180)
 
 # -------------------- Métricas principais --------------------
 st.markdown('<p class="sub-header">📊 Métricas Principais</p>', unsafe_allow_html=True)
@@ -118,109 +130,36 @@ cols[1].markdown(f'<div class="metric-card"><p class="metric-title">AC(m²)</p><
 cols[2].markdown(f'<div class="metric-card"><p class="metric-title">AP(m²)</p><p class="metric-value">{get_value("AP(m²)")}</p></div>', unsafe_allow_html=True)
 cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Rentab. Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentab. Viabilidade"))}</p></div>', unsafe_allow_html=True)
 
-# -------------------- Gráfico Scatter Plot (Orçamento) --------------------
-st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
-
-orc_base = get_value("Orçamento Base", 0)
-orc_reaj = get_value("Orçamento Reajustado", 0)
-custo_final = get_value("Custo Final", 0)
-
-# Converter para float se necessário
-for var_name in ["orc_base", "orc_reaj", "custo_final"]:
-    val = locals()[var_name]
-    if isinstance(val, str):
-        try:
-            val = float(val.replace('R$', '').replace('.', '').replace(',', '.'))
-            locals()[var_name] = val
-        except:
-            locals()[var_name] = 0
-
-fig_scatter = go.Figure()
-# Linha de referência real=planejado
-max_val = max(orc_base, orc_reaj, custo_final) * 1.1
-fig_scatter.add_trace(go.Scatter(
-    x=[0, max_val],
-    y=[0, max_val],
-    mode='lines',
-    line=dict(color='gray', dash='dash'),
-    showlegend=False
-))
-# Pontos reais
-fig_scatter.add_trace(go.Scatter(
-    x=[orc_base, orc_reaj, custo_final],
-    y=[orc_base, orc_reaj, custo_final],
-    mode='markers+text',
-    marker=dict(size=15, color='#3B82F6'),
-    text=['Base', 'Reajustado', 'Custo Final'],
-    textposition='top center',
-    name='Real'
-))
-
-fig_scatter.update_layout(
-    title='Planejado vs Real',
-    xaxis_title='Planejado (R$)',
-    yaxis_title='Real (R$)',
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    font=dict(color='white'),
-    height=400
-)
-st.plotly_chart(fig_scatter, use_container_width=True)
-
-# -------------------- Caixa Financeira --------------------
-st.markdown('<div class="section-container">', unsafe_allow_html=True)
-cols_fin = st.columns(4)
-cols_fin[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{get_value("Desvio")}</p></div>', unsafe_allow_html=True)
-cols_fin[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
-cols_fin[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
-cols_fin[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
-
 # -------------------- Barra de progresso horizontal (Avanço Físico) --------------------
 st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
 
 av_real_num = get_value("Avanço Físico Real", 0)
 av_plan_num = get_value("Avanço Físico Planejado", 0)
 
-# Conversão simples
-for var_name in ["av_real_num", "av_plan_num"]:
-    val = locals()[var_name]
-    if isinstance(val, str):
+# Conversão para números
+def to_num(v):
+    if isinstance(v, str):
         try:
-            val = float(val.replace('%','').replace(',','.'))
-            locals()[var_name] = val
+            return float(v.replace('%','').replace(',','.'))
         except:
-            locals()[var_name] = 0
+            return 0
+    return v if isinstance(v, (int,float)) else 0
+
+av_real_num = to_num(av_real_num)
+av_plan_num = to_num(av_plan_num)
+
 if av_real_num <= 1: av_real_num *= 100
 if av_plan_num <= 1: av_plan_num *= 100
 
-# Gráfico de barra horizontal
-fig_bar = go.Figure()
-fig_bar.add_trace(go.Bar(
-    y=['Avanço Físico'],
-    x=[av_real_num],
-    orientation='h',
-    marker=dict(color='#3B82F6', line=dict(color='#000', width=0)),
-    name='Real'
-))
-# Marcador planejado
-fig_bar.add_trace(go.Scatter(
-    y=['Avanço Físico'],
-    x=[av_plan_num],
-    mode='markers',
-    marker=dict(color='red', size=15, symbol='line-ns-open'),
-    name='Planejado'
-))
-fig_bar.update_layout(
-    xaxis=dict(range=[0,100], title='%', showgrid=False),
-    yaxis=dict(showticklabels=False),
-    height=150,
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    showlegend=True,
-    title='Avanço Real vs Planejado'
-)
-st.plotly_chart(fig_bar, use_container_width=True)
+# Barra estilizada
+st.markdown(f"""
+<div class="progress-wrapper">
+    <div class="progress-bar" style="width: {av_real_num}%; background: #3B82F6;">
+        Real: {av_real_num:.1f}%
+    </div>
+</div>
+<p style="color:#EF4444;font-weight:600;">Planejado: {av_plan_num:.1f}%</p>
+""", unsafe_allow_html=True)
 
 # -------------------- Timeline --------------------
 st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
