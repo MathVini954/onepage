@@ -147,62 +147,6 @@ cols_fin2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice
 st.markdown('</div>', unsafe_allow_html=True)
 
 
-# Conversão para float
-def to_float(val):
-    if isinstance(val, str):
-        try:
-            return float(val.replace('R$', '').replace('.', '').replace(',', '.'))
-        except:
-            return 0
-    return val if isinstance(val, (int,float)) else 0
-
-orc_base = to_float(orc_base)
-orc_reaj = to_float(orc_reaj)
-custo_final = to_float(custo_final)
-
-fig_scatter = go.Figure()
-max_val = max(orc_base, orc_reaj, custo_final) * 1.1
-
-# Linha de referência
-fig_scatter.add_trace(go.Scatter(
-    x=[0, max_val],
-    y=[0, max_val],
-    mode='lines',
-    line=dict(color='gray', dash='dash'),
-    showlegend=False
-))
-
-# Pontos
-fig_scatter.add_trace(go.Scatter(
-    x=[orc_base, orc_reaj, custo_final],
-    y=[orc_base, orc_reaj, custo_final],
-    mode='markers+text',
-    marker=dict(size=15, color='#3B82F6'),
-    text=['Base', 'Reajustado', 'Custo Final'],
-    textposition='top center',
-    name='Valores'
-))
-
-fig_scatter.update_layout(
-    title='Planejado vs Real',
-    xaxis_title='Planejado (R$)',
-    yaxis_title='Real (R$)',
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    font=dict(color='white'),
-    height=400
-)
-st.plotly_chart(fig_scatter, use_container_width=True)
-
-# Caixa financeira
-st.markdown('<div class="section-container">', unsafe_allow_html=True)
-cols_fin = st.columns(4)
-cols_fin[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{get_value("Desvio")}</p></div>', unsafe_allow_html=True)
-cols_fin[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
-cols_fin[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
-cols_fin[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
-
 # -------------------- Barra de progresso (Avanço Físico) --------------------
 st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
 
