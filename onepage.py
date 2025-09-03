@@ -188,17 +188,25 @@ st.markdown(f"""
 st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
 
 # Pegar datas
-inicio = get_value("Início", "N/A")
-tend = get_value("Tend", "N/A")
-prazo_concl = get_value("Prazo Concl.", "N/A")
-prazo_cliente = get_value("Prazo Cliente", "N/A")
+inicio = get_value("Início", None)
+tend = get_value("Tend", None)
+prazo_concl = get_value("Prazo Concl.", None)
+prazo_cliente = get_value("Prazo Cliente", None)
+
+# Função para formatar apenas mês/ano
+def format_month_year(date_val):
+    try:
+        dt = pd.to_datetime(date_val)
+        return dt.strftime("%b/%Y")  # Ex: Jun/2025
+    except:
+        return "N/A"
 
 # Criar cards para cada data
 cards = [
-    {"label": "Início", "date": inicio, "color": "#3B82F6"},
-    {"label": "Tendência", "date": tend, "color": "#F59E0B"},
-    {"label": "Prazo Conclusão", "date": prazo_concl, "color": "#10B981"},
-    {"label": "Prazo Cliente", "date": prazo_cliente, "color": "#EF4444"}
+    {"label": "Início", "date": format_month_year(inicio), "color": "#3B82F6"},
+    {"label": "Tendência", "date": format_month_year(tend), "color": "#F59E0B"},
+    {"label": "Prazo Conclusão", "date": format_month_year(prazo_concl), "color": "#10B981"},
+    {"label": "Prazo Cliente", "date": format_month_year(prazo_cliente), "color": "#EF4444"}
 ]
 
 cols = st.columns(len(cards))
@@ -209,6 +217,19 @@ for col, card in zip(cols, cards):
             <p style="margin:0;">{card['date']}</p>
         </div>
     """, unsafe_allow_html=True)
+
+# -------------------- Gráfico placeholder --------------------
+st.markdown('<p class="sub-header">📊 Cronograma (Gráfico)</p>', unsafe_allow_html=True)
+fig_placeholder = go.Figure()
+fig_placeholder.update_layout(
+    xaxis=dict(title="Datas"),
+    yaxis=dict(title=""),
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    height=250
+)
+st.plotly_chart(fig_placeholder, use_container_width=True)
+
 
 
 # -------------------- Visualizar dados --------------------
