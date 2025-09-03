@@ -187,28 +187,36 @@ st.markdown(f"""
 # -------------------- Linha do Tempo --------------------
 st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
 
+# Dicionário para meses em português
+meses_pt = {
+    1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr",
+    5: "Mai", 6: "Jun", 7: "Jul", 8: "Ago",
+    9: "Set", 10: "Out", 11: "Nov", 12: "Dez"
+}
+
+# Função para formatar apenas mês/ano em português
+def format_month_year_pt(date_val):
+    try:
+        dt = pd.to_datetime(date_val)
+        return f"{meses_pt[dt.month]}/{dt.year}"  # Ex: Jun/2025 → Jun/2025
+    except:
+        return None
+
 # Pegar datas
 inicio = get_value("Início", None)
 tend = get_value("Tend", None)
 prazo_concl = get_value("Prazo Concl.", None)
 prazo_cliente = get_value("Prazo Cliente", None)
 
-# Função para formatar apenas mês/ano
-def format_month_year(date_val):
-    try:
-        dt = pd.to_datetime(date_val)
-        return dt.strftime("%b/%Y")  # Ex: Jun/2025
-    except:
-        return None
-
 # Criar cards para cada data
 cards = [
-    {"label": "Início", "date": format_month_year(inicio), "color": "#3B82F6", "raw": inicio},
-    {"label": "Tendência", "date": format_month_year(tend), "color": "#F59E0B", "raw": tend},
-    {"label": "Prazo Conclusão", "date": format_month_year(prazo_concl), "color": "#10B981", "raw": prazo_concl},
-    {"label": "Prazo Cliente", "date": format_month_year(prazo_cliente), "color": "#EF4444", "raw": prazo_cliente}
+    {"label": "Início", "date": format_month_year_pt(inicio), "color": "#3B82F6", "raw": inicio},
+    {"label": "Tendência", "date": format_month_year_pt(tend), "color": "#F59E0B", "raw": tend},
+    {"label": "Prazo Conclusão", "date": format_month_year_pt(prazo_concl), "color": "#10B981", "raw": prazo_concl},
+    {"label": "Prazo Cliente", "date": format_month_year_pt(prazo_cliente), "color": "#EF4444", "raw": prazo_cliente}
 ]
 
+# Mostrar cards coloridos
 cols = st.columns(len(cards))
 for col, card in zip(cols, cards):
     col.markdown(f"""
@@ -219,7 +227,6 @@ for col, card in zip(cols, cards):
     """, unsafe_allow_html=True)
 
 # -------------------- Linha Temporal --------------------
-# Preparar dados válidos
 valid_cards = [c for c in cards if c['raw'] is not None]
 if len(valid_cards) >= 2:
     dates = [pd.to_datetime(c['raw']) for c in valid_cards]
@@ -227,7 +234,6 @@ if len(valid_cards) >= 2:
     colors = [c['color'] for c in valid_cards]
 
     fig_timeline = go.Figure()
-
     # Linha base
     fig_timeline.add_trace(go.Scatter(
         x=[min(dates), max(dates)],
@@ -263,7 +269,6 @@ if len(valid_cards) >= 2:
     st.plotly_chart(fig_timeline, use_container_width=True)
 else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
-
 
 
 # -------------------- Footer --------------------
