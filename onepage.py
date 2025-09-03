@@ -184,66 +184,32 @@ st.markdown(f"""
 <p style="color:#10B981;font-weight:600;">Aderência: {aderencia_num:.1f}%</p>
 """, unsafe_allow_html=True)
 
-# -------------------- Timeline --------------------
+# -------------------- Linha do Tempo --------------------
 st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
+
+# Pegar datas
 inicio = get_value("Início", "N/A")
 tend = get_value("Tend", "N/A")
 prazo_concl = get_value("Prazo Concl.", "N/A")
 prazo_cliente = get_value("Prazo Cliente", "N/A")
 
-dates = [inicio, tend, prazo_concl, prazo_cliente]
-labels = ["Início", "Tendência", "Prazo Conclusão", "Prazo Cliente"]
-colors = ["#3B82F6", "#F59E0B", "#10B981", "#EF4444"]
+# Criar cards para cada data
+cards = [
+    {"label": "Início", "date": inicio, "color": "#3B82F6"},
+    {"label": "Tendência", "date": tend, "color": "#F59E0B"},
+    {"label": "Prazo Conclusão", "date": prazo_concl, "color": "#10B981"},
+    {"label": "Prazo Cliente", "date": prazo_cliente, "color": "#EF4444"}
+]
 
-date_values = []
-for d in dates:
-    if isinstance(d, (datetime, pd.Timestamp)):
-        date_values.append(d)
-    elif isinstance(d, str) and d != "N/A":
-        try:
-            date_values.append(pd.to_datetime(d))
-        except:
-            date_values.append(None)
-    else:
-        date_values.append(None)
+cols = st.columns(len(cards))
+for col, card in zip(cols, cards):
+    col.markdown(f"""
+        <div style="background-color:{card['color']}; padding: 15px; border-radius: 10px; text-align:center; color:white;">
+            <p style="margin:0; font-weight:bold;">{card['label']}</p>
+            <p style="margin:0;">{card['date']}</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-valid_dates = [d for d in date_values if d is not None]
-if len(valid_dates) >= 2:
-    min_date = min(valid_dates)
-    max_date = max(valid_dates)
-    fig_timeline = go.Figure()
-    fig_timeline.add_trace(go.Scatter(
-        x=[min_date, max_date],
-        y=[0,0],
-        mode='lines',
-        line=dict(color='white', width=3),
-        showlegend=False
-    ))
-    for i, (date, label, color) in enumerate(zip(date_values, labels, colors)):
-        if date is not None:
-            fig_timeline.add_trace(go.Scatter(
-                x=[date],
-                y=[0],
-                mode='markers+text',
-                marker=dict(size=15, color=color),
-                text=[label],
-                textposition="top center",
-                name=label,
-                textfont=dict(color='white', size=12)
-            ))
-    fig_timeline.update_layout(
-        title='Cronograma da Obra',
-        showlegend=True,
-        height=300,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white'),
-        xaxis=dict(showgrid=False, zeroline=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
-    )
-    st.plotly_chart(fig_timeline, use_container_width=True)
-else:
-    st.info("Não há datas suficientes para criar a linha do tempo.")
 
 # -------------------- Visualizar dados --------------------
 with st.expander("🔍 Visualizar dados carregados"):
