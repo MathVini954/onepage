@@ -130,7 +130,7 @@ if os.path.exists(obra_logo_path):
     st.image(obra_logo_path, width=350)
 
 # -------------------- Métricas Principais --------------------
-st.markdown('<p class="sub-header">📊 Métricas Principais</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">📊 Dados do Empreendimento</p>', unsafe_allow_html=True)
 cols = st.columns(4)
 
 cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Área Construída (m²)</p><p class="metric-value">{get_value("Área Construída (m²) atual")}</p></div>', unsafe_allow_html=True)
