@@ -231,11 +231,6 @@ fig_placeholder.update_layout(
 st.plotly_chart(fig_placeholder, use_container_width=True)
 
 
-
-# -------------------- Visualizar dados --------------------
-with st.expander("🔍 Visualizar dados carregados"):
-    st.dataframe(df_clean, use_container_width=True)
-
 # -------------------- Footer --------------------
 st.markdown("---")
 st.markdown("<div style='text-align: center; color: #6B7280;'>Dashboard atualizado em tempo real | Dados da obra selecionada</div>", unsafe_allow_html=True)
