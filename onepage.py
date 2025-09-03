@@ -92,8 +92,7 @@ excel_file = pd.ExcelFile(file_path)
 sheet_names = excel_file.sheet_names
 selected_sheet = st.sidebar.selectbox("Obra:", sheet_names)
 
-# -------------------- Cabeçalho principal --------------------
-st.markdown('<p class="main-header">🏗️ Dashboard de Obras</p>', unsafe_allow_html=True)
+
 
 # -------------------- Carregar dados --------------------
 df = pd.read_excel(file_path, sheet_name=selected_sheet)
