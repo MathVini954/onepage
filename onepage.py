@@ -130,7 +130,7 @@ if os.path.exists(obra_logo_path):
     st.image(obra_logo_path, width=350)
 
 # -------------------- Métricas principais --------------------
-st.markdown('<p class="sub-header">📊 Métricas Principais</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">📊 Dados do Empreendimento</p>', unsafe_allow_html=True)
 
 # Primeira linha
 cols = st.columns(4)
