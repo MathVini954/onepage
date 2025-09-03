@@ -199,14 +199,14 @@ def format_month_year(date_val):
         dt = pd.to_datetime(date_val)
         return dt.strftime("%b/%Y")  # Ex: Jun/2025
     except:
-        return "N/A"
+        return None
 
 # Criar cards para cada data
 cards = [
-    {"label": "Início", "date": format_month_year(inicio), "color": "#3B82F6"},
-    {"label": "Tendência", "date": format_month_year(tend), "color": "#F59E0B"},
-    {"label": "Prazo Conclusão", "date": format_month_year(prazo_concl), "color": "#10B981"},
-    {"label": "Prazo Cliente", "date": format_month_year(prazo_cliente), "color": "#EF4444"}
+    {"label": "Início", "date": format_month_year(inicio), "color": "#3B82F6", "raw": inicio},
+    {"label": "Tendência", "date": format_month_year(tend), "color": "#F59E0B", "raw": tend},
+    {"label": "Prazo Conclusão", "date": format_month_year(prazo_concl), "color": "#10B981", "raw": prazo_concl},
+    {"label": "Prazo Cliente", "date": format_month_year(prazo_cliente), "color": "#EF4444", "raw": prazo_cliente}
 ]
 
 cols = st.columns(len(cards))
@@ -214,21 +214,56 @@ for col, card in zip(cols, cards):
     col.markdown(f"""
         <div style="background-color:{card['color']}; padding: 15px; border-radius: 10px; text-align:center; color:white;">
             <p style="margin:0; font-weight:bold;">{card['label']}</p>
-            <p style="margin:0;">{card['date']}</p>
+            <p style="margin:0;">{card['date'] if card['date'] else 'N/A'}</p>
         </div>
     """, unsafe_allow_html=True)
 
-# -------------------- Gráfico placeholder --------------------
-st.markdown('<p class="sub-header">📊 Cronograma (Gráfico)</p>', unsafe_allow_html=True)
-fig_placeholder = go.Figure()
-fig_placeholder.update_layout(
-    xaxis=dict(title="Datas"),
-    yaxis=dict(title=""),
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=250
-)
-st.plotly_chart(fig_placeholder, use_container_width=True)
+# -------------------- Linha Temporal --------------------
+# Preparar dados válidos
+valid_cards = [c for c in cards if c['raw'] is not None]
+if len(valid_cards) >= 2:
+    dates = [pd.to_datetime(c['raw']) for c in valid_cards]
+    labels = [c['label'] for c in valid_cards]
+    colors = [c['color'] for c in valid_cards]
+
+    fig_timeline = go.Figure()
+
+    # Linha base
+    fig_timeline.add_trace(go.Scatter(
+        x=[min(dates), max(dates)],
+        y=[0, 0],
+        mode='lines',
+        line=dict(color='gray', width=3),
+        showlegend=False
+    ))
+
+    # Pontos
+    for date, label, color in zip(dates, labels, colors):
+        fig_timeline.add_trace(go.Scatter(
+            x=[date],
+            y=[0],
+            mode='markers+text',
+            marker=dict(size=15, color=color),
+            text=[label],
+            textposition='top center',
+            name=label,
+            textfont=dict(color='white', size=12)
+        ))
+
+    fig_timeline.update_layout(
+        title='Cronograma da Obra',
+        showlegend=False,
+        height=200,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(showgrid=False, zeroline=False, title=''),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        font=dict(color='white')
+    )
+    st.plotly_chart(fig_timeline, use_container_width=True)
+else:
+    st.info("Não há datas suficientes para criar a linha do tempo.")
+
 
 
 # -------------------- Footer --------------------
