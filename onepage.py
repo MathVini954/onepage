@@ -112,11 +112,13 @@ def format_money(value):
     return str(value)
 
 def format_percent(value):
-    if isinstance(value, (int, float)) and value <= 1:
-        return f"{value*100:.1f}%"
-    elif isinstance(value, (int, float)):
-        return f"{value:.1f}%"
-    return str(value)
+    try:
+        if isinstance(value, (int, float)):
+            # Todos os valores do Excel em formato % chegam como decimais (0.85 = 85%)
+            return f"{value*100:.0f}%"
+        return str(value)
+    except:
+        return "N/A"
 
 def to_float(val):
     if isinstance(val, str):
@@ -170,23 +172,20 @@ st.markdown('</div>', unsafe_allow_html=True)
 # -------------------- Barra de progresso (Avanço Físico) --------------------
 st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
 
-av_real_num = to_float(get_value("Avanço Físico Real", 0))
-av_plan_num = to_float(get_value("Avanço Físico Planejado", 0))
-aderencia_num = to_float(get_value("Aderência Física", 0))
-
-if av_real_num <= 1: av_real_num *= 100
-if av_plan_num <= 1: av_plan_num *= 100
-if aderencia_num <= 1: aderencia_num *= 100
+av_real_num = get_value("Avanço Físico Real", 0)
+av_plan_num = get_value("Avanço Físico Planejado", 0)
+aderencia_num = get_value("Aderência Física", 0)
 
 st.markdown(f"""
 <div class="progress-wrapper">
-    <div class="progress-bar" style="width: {av_real_num}%; background: #3B82F6;">
-        Real: {av_real_num:.1f}%
+    <div class="progress-bar" style="width: {av_real_num*100:.0f}%; background: #3B82F6;">
+        Real: {format_percent(av_real_num)}
     </div>
 </div>
-<p style="color:#EF4444;font-weight:600;">Planejado: {av_plan_num:.1f}%</p>
-<p style="color:#10B981;font-weight:600;">Aderência: {aderencia_num:.1f}%</p>
+<p style="color:#EF4444;font-weight:600;">Planejado: {format_percent(av_plan_num)}</p>
+<p style="color:#10B981;font-weight:600;">Aderência: {format_percent(aderencia_num)}</p>
 """, unsafe_allow_html=True)
+
 
 # -------------------- Linha do Tempo --------------------
 st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
