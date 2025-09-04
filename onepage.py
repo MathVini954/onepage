@@ -33,34 +33,34 @@ st.markdown("""
     border-bottom: 2px solid #E5E7EB;
 }
 .metric-card {
-    background-color: #1E293B;
+    background-color: #1A253C; /* Azul Escuro */
     border-radius: 0.75rem;
     padding: 1rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     height: 100%;
-    border-left: 5px solid #3B82F6;
+    border-left: 5px solid #5DAAAB; /* Azul Céu */
     margin-bottom: 1rem;
 }
 .metric-title {
     font-size: 1rem;
-    color: #93C5FD;
+    color: #5DAAAB; /* Azul Céu */
     font-weight: 600;
     margin-bottom: 0.5rem;
 }
 .metric-value {
     font-size: 1.6rem;
-    color: #FFFFFF;
+    color: #E5E8DD; /* Branco Nuvem */
     font-weight: 800;
 }
 .section-container {
-    background-color: #0F172A;
+    background-color: #1A253C; /* Azul Escuro */
     border-radius: 1rem;
     padding: 1.5rem;
     margin-bottom: 2rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.4);
 }
 .progress-wrapper {
-    background-color: #1E293B;
+    background-color: #1A253C; /* Azul Escuro */
     border-radius: 20px;
     padding: 5px;
     width: 100%;
@@ -70,7 +70,7 @@ st.markdown("""
     border-radius: 20px;
     text-align: center;
     font-weight: bold;
-    color: white;
+    color: #E5E8DD; /* Branco Nuvem */
     line-height: 30px;
 }
 </style>
