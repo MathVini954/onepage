@@ -175,8 +175,8 @@ av_plan_num = to_float(get_value("Avanço Físico Planejado", 0))
 aderencia_num = to_float(get_value("Aderência Física", 0))
 
 if av_real_num <= 1: av_real_num *= 100
-if av_plan_num <= 1: av_plan_num *= 150
-if aderencia_num <= 1: aderencia_num *= 100
+if av_plan_num <= 1: av_plan_num *= 100
+if aderencia_num <= 1: aderencia_num *= 1
 
 st.markdown(f"""
 <div class="progress-wrapper">
