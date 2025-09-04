@@ -62,7 +62,7 @@ st.markdown("""
     box-shadow: 0 4px 6px rgba(0,0,0,0.4);
 }
 .progress-wrapper {
-    background-color: #005274; /* Azul Escuro */
+    background-color: #1d2f57; /* Azul Escuro */
     border-radius: 20px;
     padding: 5px;
     width: 100%;
