@@ -278,13 +278,39 @@ st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_al
 
 status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
 
-if not status_rows.empty:
-    status_list = status_rows['Valor'].tolist()
-    with st.expander("📌 Ver Status Completo", expanded=False):
-        for i, status in enumerate(status_list, 1):
+# Lista para armazenar novos status digitados
+new_status_list = []
+
+with st.expander("📌 Ver / Editar Status", expanded=False):
+    # Mostrar status existentes
+    if not status_rows.empty:
+        for i, status in enumerate(status_rows['Valor'], 1):
             st.markdown(f"**{i}.** {status}")
-else:
-    st.info("Nenhum status de andamento disponível para esta obra.")
+    
+    st.markdown("---")
+    # Input para adicionar novo status
+    new_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
+    
+    # Botão para salvar
+    if st.button("💾 Salvar Status"):
+        if new_status.strip() != "":
+            # Carrega planilha
+            df_excel = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
+            
+            # Encontrar próxima linha vazia na coluna A
+            next_row = len(df_excel)
+            
+            # Adicionar nova linha com título e valor
+            df_excel.loc[next_row] = ["Status Andamento Obra", new_status]
+            
+            # Salvar de volta no Excel
+            with pd.ExcelWriter("ONE_PAGE.xlsx", mode="a", if_sheet_exists="replace") as writer:
+                df_excel.to_excel(writer, sheet_name=selected_sheet, index=False)
+            
+            st.success("✅ Novo status salvo com sucesso!")
+        else:
+            st.warning("⚠️ Digite algum valor antes de salvar.")
+
 
 
 
