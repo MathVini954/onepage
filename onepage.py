@@ -26,12 +26,13 @@ st.markdown("""
 }
 .sub-header {
     font-size: 1.8rem;
-    color: #374151;
+    color: #E5E8DD; /* Branco Nuvem */
     font-weight: 700;
     margin: 2rem 0 1.5rem 0;
     padding-bottom: 0.5rem;
-    border-bottom: 2px solid #E5E7EB;
+    border-bottom: 2px solid #5DAAAB; /* Azul Céu */
 }
+
 .metric-card {
     background-color: #1A253C; /* Azul Escuro */
     border-radius: 0.75rem;
