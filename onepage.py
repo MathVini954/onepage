@@ -291,26 +291,25 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
     # Input para adicionar novo status
     new_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
     
-    # Botão para salvar
-    if st.button("💾 Salvar Status"):
-        if new_status.strip() != "":
-            # Carrega planilha
-            df_excel = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
-            
-            # Encontrar próxima linha vazia na coluna A
-            next_row = len(df_excel)
-            
-            # Adicionar nova linha com título e valor
-            df_excel.loc[next_row] = ["Status Andamento Obra", new_status]
-            
-            # Salvar de volta no Excel
-            with pd.ExcelWriter("ONE_PAGE.xlsx", mode="a", if_sheet_exists="replace") as writer:
-                df_excel.to_excel(writer, sheet_name=selected_sheet, index=False)
-            
-            st.success("✅ Novo status salvo com sucesso!")
-        else:
-            st.warning("⚠️ Digite algum valor antes de salvar.")
-
+   # Botão para salvar
+if st.button("💾 Salvar Status"):
+    if new_status.strip() != "":
+        # Carregar planilha existente
+        df_excel = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
+        
+        # Encontrar a próxima linha vazia
+        next_row = len(df_excel)
+        
+        # Adicionar nova linha com título e valor
+        df_excel.loc[next_row] = ["Status Andamento Obra", new_status]
+        
+        # Salvar de volta no Excel, substituindo a aba atual
+        with pd.ExcelWriter("ONE_PAGE.xlsx", mode="a", if_sheet_exists="replace") as writer:
+            df_excel.to_excel(writer, sheet_name=selected_sheet, index=False)
+        
+        st.success("✅ Novo status salvo com sucesso!")
+    else:
+        st.warning("⚠️ Digite algum valor antes de salvar.")
 
 
 
