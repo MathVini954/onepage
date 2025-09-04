@@ -324,7 +324,7 @@ st.markdown(
         <br>
         Desenvolvido por <b>Matheus Vinicio</b> — Engenharia
         <br>
-        © 2025 <a href='https://wifa.com.br/rioave/dashboard' target='_blank' style='color: gray; text-decoration: none;'><b>RIO AVE</b></a>
+        © 2025 <a href='https://www.rioave.com.br/' target='_blank' style='color: gray; text-decoration: none;'><b>RIO AVE</b></a>
     </div>
     """,
     unsafe_allow_html=True
