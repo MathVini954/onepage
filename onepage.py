@@ -77,32 +77,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<style>
-/* -------------------- Sidebar Hover -------------------- */
-.css-1d391kg {
-    width: 3rem; /* largura minimizada */
-    transition: width 0.3s ease;
-    overflow-x: hidden;
-}
-
-.css-1d391kg:hover {
-    width: 18rem; /* largura aberta ao passar o mouse */
-}
-
-/* Conteúdo interno da sidebar */
-.css-1d391kg > .block-container {
-    opacity: 0; /* invisível quando minimizada */
-    transition: opacity 0.3s ease;
-}
-
-.css-1d391kg:hover > .block-container {
-    opacity: 1; /* visível ao passar o mouse */
-}
-</style>
-""", unsafe_allow_html=True)
-
-
 # -------------------- Sidebar (filtro + logo empresa) --------------------
 logo_empresa_path = "empresa_logo.png"
 if os.path.exists(logo_empresa_path):
