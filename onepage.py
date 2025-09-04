@@ -115,7 +115,7 @@ def format_percent(value):
     try:
         if isinstance(value, (int, float)):
             # Todos os valores do Excel em formato % chegam como decimais (0.85 = 85%)
-            return f"{value*100:.0f}%"
+            return f"{value*100:.2f}%"
         return str(value)
     except:
         return "N/A"
