@@ -6,7 +6,7 @@ import os
 
 # -------------------- Configuração da página --------------------
 st.set_page_config(
-    page_title="ONE PAGEs",
+    page_title="ONE PAGE - ENGENHARIA",
     page_icon="🏗️",
     layout="wide",
     initial_sidebar_state="expanded"
