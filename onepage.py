@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 import os
+import openpyxl
 
 # -------------------- Configuração da página --------------------
 st.set_page_config(
@@ -273,43 +274,54 @@ if len(valid_cards) >= 2:
 else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
 
+
 # -------------------- Status do Andamento da Obra --------------------
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
-status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
+# Função para carregar status do Excel
+def load_status():
+    df_excel = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
+    if 'Metrica' not in df_excel.columns or 'Valor' not in df_excel.columns:
+        df_excel = pd.DataFrame(columns=['Metrica', 'Valor'])
+    status_rows = df_excel[df_excel['Metrica'].str.strip() == "Status Andamento Obra"]
+    return status_rows
 
-# Lista para armazenar novos status digitados
-new_status_list = []
+status_rows = load_status()
 
-with st.expander("📌 Ver / Editar Status", expanded=False):
-    # Mostrar status existentes
-    if not status_rows.empty:
-        for i, status in enumerate(status_rows['Valor'], 1):
-            st.markdown(f"**{i}.** {status}")
-    
-    st.markdown("---")
-    # Input para adicionar novo status
-    new_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
-    
-   # Botão para salvar
-if st.button("💾 Salvar Status"):
-    if new_status.strip() != "":
-        # Carregar planilha existente
-        df_excel = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
-        
-        # Encontrar a próxima linha vazia
-        next_row = len(df_excel)
-        
-        # Adicionar nova linha com título e valor
-        df_excel.loc[next_row] = ["Status Andamento Obra", new_status]
-        
-        # Salvar de volta no Excel, substituindo a aba atual
-        with pd.ExcelWriter("ONE_PAGE.xlsx", mode="a", if_sheet_exists="replace") as writer:
-            df_excel.to_excel(writer, sheet_name=selected_sheet, index=False)
-        
-        st.success("✅ Novo status salvo com sucesso!")
-    else:
-        st.warning("⚠️ Digite algum valor antes de salvar.")
+# Mostrar status existentes
+if not status_rows.empty:
+    for i, status in enumerate(status_rows['Valor'], 1):
+        st.markdown(f"**{i}.** {status}")
+else:
+    st.info("Nenhum status de andamento disponível para esta obra.")
+
+# Expander para adicionar novo status
+with st.expander("📌 Adicionar / Editar Status", expanded=False):
+    new_status = st.text_area("Digite um novo status...", placeholder="Novo status")
+
+    if st.button("💾 Salvar Status"):
+        if new_status.strip() != "":
+            # Caminho do arquivo
+            file_path = "ONE_PAGE.xlsx"
+
+            # Abrir workbook com openpyxl
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb[selected_sheet]
+
+            # Próxima linha vazia
+            next_row = ws.max_row + 1
+
+            # Inserir valores
+            ws.cell(row=next_row, column=1, value="Status Andamento Obra")
+            ws.cell(row=next_row, column=2, value=new_status)
+
+            # Salvar workbook
+            wb.save(file_path)
+
+            # Recarregar página para mostrar status atualizado e fechar expander
+            st.experimental_rerun()
+        else:
+            st.warning("⚠️ Digite algum valor antes de salvar.")
 
 
 
