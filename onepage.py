@@ -11,6 +11,30 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+<style>
+/* Sidebar padrão (minimizada) */
+.css-1d391kg {
+    width: 3rem; /* Largura mínima */
+    transition: width 0.3s ease;
+    overflow-x: hidden;
+}
+
+/* Ao passar o mouse, abre */
+.css-1d391kg:hover {
+    width: 18rem; /* Largura normal */
+}
+
+/* Conteúdo dentro da sidebar */
+.css-1d391kg > .block-container {
+    opacity: 0; /* invisível quando minimizada */
+    transition: opacity 0.3s ease;
+}
+
+/* Conteúdo visível ao hover */
+.css-1d391kg:hover > .block-container {
+    opacity: 1;
+}
+</style>
 
 # -------------------- Estilos CSS --------------------
 st.markdown("""
