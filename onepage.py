@@ -281,44 +281,48 @@ st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_al
 # Caminho da planilha
 file_path = "ONE_PAGE.xlsx"
 
-# Função para carregar status atuais
+# Função para carregar status existentes
 def load_status(sheet_name):
     df_excel = pd.read_excel(file_path, sheet_name=sheet_name)
+    # Garantir que as colunas existam
     if 'Metrica' not in df_excel.columns or 'Valor' not in df_excel.columns:
         df_excel = pd.DataFrame(columns=['Metrica', 'Valor'])
+    # Filtrar apenas os status
     status_rows = df_excel[df_excel['Metrica'].str.strip() == "Status Andamento Obra"]
     return status_rows
 
+# Carregar status existentes
 status_rows = load_status(selected_sheet)
 
 # Mostrar status existentes
+st.markdown("**Status atuais:**")
 if not status_rows.empty:
     for i, status in enumerate(status_rows['Valor'], 1):
         st.markdown(f"**{i}.** {status}")
 else:
     st.info("Nenhum status de andamento disponível para esta obra.")
 
-# Expander para adicionar novo status
-with st.expander("📌 Adicionar / Editar Status", expanded=False):
-    new_status = st.text_area("Digite um novo status...", placeholder="Novo status")
+# Caixa para adicionar novo status
+with st.expander("📌 Adicionar Novo Status", expanded=False):
+    new_status = st.text_area("Digite o novo status...", placeholder="Novo status")
 
     if st.button("💾 Salvar Status"):
         if new_status.strip() != "":
-            # Abrir workbook com openpyxl
+            # Abrir planilha com openpyxl
             wb = openpyxl.load_workbook(file_path)
             ws = wb[selected_sheet]
 
             # Próxima linha vazia
             next_row = ws.max_row + 1
 
-            # Inserir valores
+            # Inserir novo status
             ws.cell(row=next_row, column=1, value="Status Andamento Obra")
             ws.cell(row=next_row, column=2, value=new_status)
 
-            # Salvar workbook
+            # Salvar planilha
             wb.save(file_path)
 
-            # Recarregar página para atualizar lista de status
+            # Atualizar dashboard imediatamente
             st.experimental_rerun()
         else:
             st.warning("⚠️ Digite algum valor antes de salvar.")
