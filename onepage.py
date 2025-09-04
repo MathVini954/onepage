@@ -315,12 +315,10 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
             st.warning("⚠️ Digite algum valor antes de salvar.")
 
 
-st.markdown("""---""")
-
 st.markdown(
     """
     <div style='text-align: center; font-size: 14px; color: gray; padding-top: 20px;'>
-        <i>“Inspirados pelo que te faz bem”</i>
+        <i>"Inspirados pelo que te faz bem"</i>
         <br>
         Desenvolvido por <b>Matheus Vinicio</b> — Engenharia
         <br>
@@ -328,3 +326,4 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True
+)
