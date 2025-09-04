@@ -311,8 +311,7 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
             
             st.success("✅ Novo status salvo com sucesso!")
 
-
-        st.markdown("""---""")
+st.markdown("""---""")
 
 st.markdown(
     """
