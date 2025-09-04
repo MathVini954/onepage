@@ -272,4 +272,18 @@ if len(valid_cards) >= 2:
 else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
 
+# -------------------- Status do Andamento da Obra --------------------
+st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
+
+status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
+
+if not status_rows.empty:
+    status_list = status_rows['Valor'].tolist()
+    with st.expander("📌 Ver Status Completo", expanded=False):
+        for i, status in enumerate(status_list, 1):
+            st.markdown(f"**{i}.** {status}")
+else:
+    st.info("Nenhum status de andamento disponível para esta obra.")
+
+
 
