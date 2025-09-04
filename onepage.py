@@ -81,7 +81,7 @@ logo_empresa_path = "empresa_logo.png"
 if os.path.exists(logo_empresa_path):
     st.sidebar.image(logo_empresa_path, width=200)
 
-st.sidebar.markdown("### 📂 Selecione a Obra")
+st.sidebar.markdown("### 📂 Selecione a Obra - Jul/25")
 
 file_path = "ONE_PAGE.xlsx"
 if not os.path.exists(file_path):
