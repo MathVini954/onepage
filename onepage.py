@@ -176,7 +176,7 @@ aderencia_num = to_float(get_value("Aderência Física", 0))
 
 if av_real_num <= 1: av_real_num *= 100
 if av_plan_num <= 1: av_plan_num *= 100
-if aderencia_num <= 1: aderencia_num *= 1
+if aderencia_num <= 1: aderencia_num *= 100
 
 st.markdown(f"""
 <div class="progress-wrapper">
