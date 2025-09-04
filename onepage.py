@@ -35,7 +35,7 @@ st.markdown("""
 }
 
 .metric-card {
-    background-color: #1d4f6d; /* Azul Fundo do Mar */
+    background-color: #002f4b; /* Azul Fundo do Mar */
     border-radius: 0.75rem;
     padding: 1rem;
     box-shadow: 0 4px 6px rgba(0,0,0,0.3);
