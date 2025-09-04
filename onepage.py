@@ -310,7 +310,7 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
                 df_excel.to_excel(writer, sheet_name=selected_sheet, index=False)
             
             st.success("✅ Novo status salvo com sucesso!")
-)
+
         else:
             st.warning("⚠️ Digite algum valor antes de salvar.")
 
