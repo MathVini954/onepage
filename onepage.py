@@ -35,7 +35,7 @@ st.markdown("""
 }
 
 .metric-card {
-    background-color: #005E71; /* Azul Fundo do Mar */
+    background-color: #005274; /* Azul Fundo do Mar */
     border-radius: 0.75rem;
     padding: 1rem;
     box-shadow: 0 4px 6px rgba(0,0,0,0.3);
@@ -62,7 +62,7 @@ st.markdown("""
     box-shadow: 0 4px 6px rgba(0,0,0,0.4);
 }
 .progress-wrapper {
-    background-color: #1A253C; /* Azul Escuro */
+    background-color: #005274; /* Azul Escuro */
     border-radius: 20px;
     padding: 5px;
     width: 100%;
