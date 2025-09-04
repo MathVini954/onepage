@@ -310,5 +310,21 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
                 df_excel.to_excel(writer, sheet_name=selected_sheet, index=False)
             
             st.success("✅ Novo status salvo com sucesso!")
+
+
+        st.markdown("""---""")
+
+st.markdown(
+    """
+    <div style='text-align: center; font-size: 14px; color: gray; padding-top: 20px;'>
+        <i>“Inspirados pelo que te faz bem”</i>
+        <br>
+        Desenvolvido por <b>Matheus Vinicio</b> — Engenharia
+        <br>
+        © 2025 <a href='https://wifa.com.br/rioave/dashboard' target='_blank' style='color: gray; text-decoration: none;'><b>RIO AVE</b></a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
         else:
             st.warning("⚠️ Digite algum valor antes de salvar.")
