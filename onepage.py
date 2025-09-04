@@ -278,15 +278,18 @@ else:
 # -------------------- Status do Andamento da Obra --------------------
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
-# Função para carregar status do Excel
-def load_status():
-    df_excel = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
+# Caminho da planilha
+file_path = "ONE_PAGE.xlsx"
+
+# Função para carregar status atuais
+def load_status(sheet_name):
+    df_excel = pd.read_excel(file_path, sheet_name=sheet_name)
     if 'Metrica' not in df_excel.columns or 'Valor' not in df_excel.columns:
         df_excel = pd.DataFrame(columns=['Metrica', 'Valor'])
     status_rows = df_excel[df_excel['Metrica'].str.strip() == "Status Andamento Obra"]
     return status_rows
 
-status_rows = load_status()
+status_rows = load_status(selected_sheet)
 
 # Mostrar status existentes
 if not status_rows.empty:
@@ -301,9 +304,6 @@ with st.expander("📌 Adicionar / Editar Status", expanded=False):
 
     if st.button("💾 Salvar Status"):
         if new_status.strip() != "":
-            # Caminho do arquivo
-            file_path = "ONE_PAGE.xlsx"
-
             # Abrir workbook com openpyxl
             wb = openpyxl.load_workbook(file_path)
             ws = wb[selected_sheet]
@@ -318,7 +318,7 @@ with st.expander("📌 Adicionar / Editar Status", expanded=False):
             # Salvar workbook
             wb.save(file_path)
 
-            # Recarregar página para mostrar status atualizado e fechar expander
+            # Recarregar página para atualizar lista de status
             st.experimental_rerun()
         else:
             st.warning("⚠️ Digite algum valor antes de salvar.")
