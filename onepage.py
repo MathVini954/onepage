@@ -83,7 +83,7 @@ logo_empresa_path = "empresa_logo.png"
 if os.path.exists(logo_empresa_path):
     st.sidebar.image(logo_empresa_path, width=200)
 
-st.sidebar.markdown("### 📂 Selecione a Obra - Jul/25")
+st.sidebar.markdown("### 📂 Comparativo de Obras - Jul/25")
 
 file_path = "ONE_PAGE.xlsx"
 if not os.path.exists(file_path):
@@ -92,20 +92,11 @@ if not os.path.exists(file_path):
 
 excel_file = pd.ExcelFile(file_path)
 sheet_names = excel_file.sheet_names
-selected_sheet = st.sidebar.selectbox("Obra:", sheet_names)
 
+# Multiselect para comparativo
+selected_sheets = st.sidebar.multiselect("Selecione as obras para comparar:", sheet_names, default=[sheet_names[0]])
 
-
-# -------------------- Carregar dados --------------------
-df = pd.read_excel(file_path, sheet_name=selected_sheet)
-df_clean = df.iloc[:, [0, 1]].dropna()
-df_clean.columns = ['Metrica', 'Valor']
-
-dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()}
-
-def get_value(key, default="N/A"):
-    return dados.get(key, default)
-
+# -------------------- Funções auxiliares --------------------
 def format_money(value):
     if isinstance(value, (int, float)):
         return f"R$ {value:,.0f}".replace(',', '.')
@@ -126,11 +117,18 @@ def to_float(val):
             return 0
     return val if isinstance(val, (int,float)) else 0
 
-# -------------------- Logo da obra --------------------
-obra_logo_path = f"{selected_sheet}.png"
-if os.path.exists(obra_logo_path):
-    st.image(obra_logo_path, width=350)
-
+# -------------------- Loop pelas obras selecionadas --------------------
+for selected_sheet in selected_sheets:
+    st.markdown(f"<h2 style='color:#5DAAAB'>{selected_sheet}</h2>", unsafe_allow_html=True)
+    
+    df = pd.read_excel(file_path, sheet_name=selected_sheet)
+    df_clean = df.iloc[:, [0, 1]].dropna()
+    df_clean.columns = ['Metrica', 'Valor']
+    dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()}
+    
+    def get_value(key, default="N/A"):
+        return dados.get(key, default)
+        
 # -------------------- Métricas Principais --------------------
 st.markdown('<p class="sub-header">📊 Dados do Empreendimento</p>', unsafe_allow_html=True)
 cols = st.columns(4)
