@@ -293,15 +293,39 @@ else:
 # -------------------- Status do Andamento da Obra --------------------
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
+# Lista para armazenar novos status digitados na sessão
+if "novos_status" not in st.session_state:
+    st.session_state.novos_status = []
+
 with st.expander("📌 Ver / Editar Status", expanded=False):
+    # Mostrar status existentes do Excel
+    df_updated = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
+    df_clean = df_updated.iloc[:, [0, 1]].dropna()
+    df_clean.columns = ['Metrica', 'Valor']
+    status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
+
+    # Mostrar todos status: mais recentes no topo
+    todos_status = list(reversed(status_rows['Valor'].tolist())) + list(reversed(st.session_state.novos_status))
+    if todos_status:
+        for i, status in enumerate(todos_status, 1):
+            st.markdown(f"**{i}.** {status}")
+
+    st.markdown("---")
     # Input para adicionar novo status
-    new_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
+    novo_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
 
-    # Botão salvar
-    if st.button("💾 Salvar Status"):
-        if new_status.strip() != "":
+    if st.button("➕ Adicionar Status"):
+        if novo_status.strip() != "":
+            st.session_state.novos_status.append(novo_status.strip())
+            st.success("✅ Status adicionado na lista (ainda não salvo no Excel).")
+        else:
+            st.warning("⚠️ Digite algum valor antes de adicionar.")
+
+    st.markdown("---")
+    # Botão para salvar todos os novos status no Excel
+    if st.button("💾 Salvar Excel"):
+        if st.session_state.novos_status:
             import openpyxl
-
             file_path = "ONE_PAGE.xlsx"
             wb = openpyxl.load_workbook(file_path)
             ws = wb[selected_sheet]
@@ -312,26 +336,17 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
                 last_row -= 1
             next_row = last_row + 1
 
-            # Inserir novo status
-            ws.cell(row=next_row, column=1, value="Status Andamento Obra")
-            ws.cell(row=next_row, column=2, value=new_status.strip())
+            # Inserir todos os novos status
+            for status in st.session_state.novos_status:
+                ws.cell(row=next_row, column=1, value="Status Andamento Obra")
+                ws.cell(row=next_row, column=2, value=status)
+                next_row += 1
 
             wb.save(file_path)
-            st.success("✅ Novo status salvo com sucesso!")
+            st.success(f"✅ {len(st.session_state.novos_status)} status salvos no Excel com sucesso!")
 
-    # Recarregar do Excel sempre que abrir o expander ou após salvar
-    df_updated = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
-    df_clean = df_updated.iloc[:, [0, 1]].dropna()
-    df_clean.columns = ['Metrica', 'Valor']
-    status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
-
-    # Mostrar status existentes: mais recentes no topo
-    if not status_rows.empty:
-        for i, status in enumerate(reversed(status_rows['Valor'].tolist()), 1):
-            st.markdown(f"**{i}.** {status}")
-
-
-
+            # Limpar a lista de novos status
+            st.session_state.novos_status = []
 
 
 st.markdown("""---""")
