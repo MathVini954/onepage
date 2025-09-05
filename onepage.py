@@ -281,6 +281,7 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
     # Input para adicionar novo status
     new_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
 
+    # Botão salvar
     if st.button("💾 Salvar Status"):
         if new_status.strip() != "":
             import openpyxl
@@ -289,7 +290,7 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
             wb = openpyxl.load_workbook(file_path)
             ws = wb[selected_sheet]
 
-            # Procurar última linha ocupada
+            # Encontrar última linha ocupada na coluna A
             last_row = ws.max_row
             while last_row > 0 and ws.cell(row=last_row, column=1).value is None:
                 last_row -= 1
@@ -300,19 +301,19 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
             ws.cell(row=next_row, column=2, value=new_status.strip())
 
             wb.save(file_path)
-
             st.success("✅ Novo status salvo com sucesso!")
 
-    # Sempre recarrega do Excel para mostrar lista atualizada
+    # Recarregar do Excel sempre que abrir o expander ou após salvar
     df_updated = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
     df_clean = df_updated.iloc[:, [0, 1]].dropna()
     df_clean.columns = ['Metrica', 'Valor']
     status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
 
-    # Mostrar status existentes (já atualizado)
+    # Mostrar status existentes: mais recentes no topo
     if not status_rows.empty:
-        for i, status in enumerate(status_rows['Valor'], 1):
+        for i, status in enumerate(reversed(status_rows['Valor'].tolist()), 1):
             st.markdown(f"**{i}.** {status}")
+
 
 
 
