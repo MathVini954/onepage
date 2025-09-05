@@ -182,7 +182,7 @@ if df.shape[1] >= 4:  # Verifica se existem pelo menos 4 colunas
     col_fin2_1 = st.columns(3)
     col_fin2_2 = st.columns(4)
 
-    col_fin2_1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
+   cols1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True) 
     col_fin2_1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
     col_fin2_1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value_fin2("Custo Final"))}</p></div>', unsafe_allow_html=True)
 
