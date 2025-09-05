@@ -290,9 +290,6 @@ else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
 
 
-import streamlit as st
-import os
-
 # -------------------- Configuração da obra --------------------
 obra = "ESSENZA"
 pasta_obra = f"obras/{obra}"
@@ -312,38 +309,53 @@ if "status_list" not in st.session_state:
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
 with st.expander("📌 Ver / Editar Status", expanded=True):
-    # Mostrar status existentes
+    # Mostrar status com checkboxes
+    status_para_apagar = []
     if st.session_state.status_list:
-        for i, status in enumerate(st.session_state.status_list, 1):
-            st.markdown(f"**{i}.** {status}")
+        for i, status in enumerate(st.session_state.status_list):
+            col1, col2 = st.columns([0.05, 0.95])
+            with col1:
+                checked = st.checkbox("", key=f"chk_{i}")
+            with col2:
+                st.markdown(f"{i+1}. {status}")
+            if checked:
+                status_para_apagar.append(status)
 
     st.markdown("---")
     # Input para adicionar novo status
     novo_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
 
-    # Apagar status
-    status_para_apagar = st.selectbox("Selecionar status para apagar", [""] + st.session_state.status_list)
+    # Botões
+    col_salvar, col_apagar = st.columns(2)
+    with col_salvar:
+        if st.button("💾 Salvar Status no TXT"):
+            # Adiciona novo status se não estiver vazio
+            if novo_status.strip():
+                st.session_state.status_list.append(novo_status.strip())
+
+            # Gravar todos os status no TXT
+            with open(arquivo_status, "w", encoding="utf-8") as f:
+                for status in st.session_state.status_list:
+                    f.write(status + "\n")
+
+            st.success(f"✅ {len(st.session_state.status_list)} status salvos no arquivo '{arquivo_status}'!")
+
+    with col_apagar:
+        if st.button("🗑️ Apagar selecionados"):
+            if status_para_apagar:
+                for s in status_para_apagar:
+                    if s in st.session_state.status_list:
+                        st.session_state.status_list.remove(s)
+                # Atualiza TXT
+                with open(arquivo_status, "w", encoding="utf-8") as f:
+                    for status in st.session_state.status_list:
+                        f.write(status + "\n")
+                st.success(f"✅ {len(status_para_apagar)} status apagados e arquivo atualizado!")
+            else:
+                st.warning("⚠️ Selecione ao menos um status para apagar.")
 
     st.markdown("---")
-    # Botão Salvar
-    if st.button("💾 Salvar Status no TXT"):
-        # Adiciona novo status se não estiver vazio
-        if novo_status.strip():
-            st.session_state.status_list.append(novo_status.strip())
-
-        # Remove status selecionado se houver
-        if status_para_apagar and status_para_apagar in st.session_state.status_list:
-            st.session_state.status_list.remove(status_para_apagar)
-
-        # Gravar todos os status no TXT
-        with open(arquivo_status, "w", encoding="utf-8") as f:
-            for status in st.session_state.status_list:
-                f.write(status + "\n")
-
-        st.success(f"✅ {len(st.session_state.status_list)} status salvos no arquivo '{arquivo_status}'!")
-
-    st.markdown("---")
-    # Botão para baixar o arquivo TXT
+    # Botão para baixar TXT
     if st.session_state.status_list:
         with open(arquivo_status, "r", encoding="utf-8") as f:
             txt_bytes = f.read().encode('utf-8')
@@ -353,10 +365,6 @@ with st.expander("📌 Ver / Editar Status", expanded=True):
             file_name=f"{obra}_status.txt",
             mime="text/plain"
         )
-
-
-
-
 
 st.markdown("""---""")
 
