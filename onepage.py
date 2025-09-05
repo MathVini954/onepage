@@ -290,72 +290,64 @@ else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
 
 
-# -------------------- Status do Andamento da Obra --------------------
+import streamlit as st
+import os
+
+# -------------------- Configurações --------------------
+obra = "ESSENZA"
+pasta_obra = f"obras/{obra}"
+arquivo_status = os.path.join(pasta_obra, "status.txt")
+
+# Garantir que a pasta exista
+if not os.path.exists(pasta_obra):
+    os.makedirs(pasta_obra)
+
+# Inicializar lista de status na sessão
+if "status_list" not in st.session_state:
+    # Ler status do arquivo, se existir
+    if os.path.exists(arquivo_status):
+        with open(arquivo_status, "r", encoding="utf-8") as f:
+            st.session_state.status_list = [linha.strip() for linha in f.readlines() if linha.strip()]
+    else:
+        st.session_state.status_list = []
+
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
-# Lista para armazenar novos status digitados na sessão
-if "novos_status" not in st.session_state:
-    st.session_state.novos_status = []
-
-with st.expander("📌 Ver / Editar Status", expanded=False):
-    # Recarregar status do Excel
-    df_updated = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
-    df_clean = df_updated.iloc[:, [0, 1]].dropna()
-    df_clean.columns = ['Metrica', 'Valor']
-    status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
-
-    # Lista combinada: novos status da sessão + existentes do Excel
-    todos_status = list(reversed(st.session_state.novos_status)) + list(reversed(status_rows['Valor'].tolist()))
-    if todos_status:
-        for i, status in enumerate(todos_status, 1):
+with st.expander("📌 Ver / Editar Status", expanded=True):
+    # Mostrar lista de status
+    if st.session_state.status_list:
+        for i, status in enumerate(st.session_state.status_list, 1):
             st.markdown(f"**{i}.** {status}")
 
     st.markdown("---")
-    # Input para adicionar novo status
+    # Adicionar novo status
     novo_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
 
     if st.button("➕ Adicionar Status"):
-        if novo_status.strip() != "":
-            st.session_state.novos_status.append(novo_status.strip())
-            st.success("✅ Status adicionado na lista (ainda não salvo no Excel).")
+        if novo_status.strip():
+            st.session_state.status_list.append(novo_status.strip())
+            st.success("✅ Status adicionado (ainda não salvo no arquivo).")
         else:
             st.warning("⚠️ Digite algum valor antes de adicionar.")
 
     st.markdown("---")
-    # Botão para salvar todos os novos status no Excel
-    if st.button("💾 Salvar Excel"):
-        if st.session_state.novos_status:
-            import openpyxl
-            file_path = "ONE_PAGE.xlsx"
-            wb = openpyxl.load_workbook(file_path)
-            ws = wb[selected_sheet]
+    # Apagar status
+    status_para_apagar = st.selectbox("Selecionar status para apagar", [""] + st.session_state.status_list)
+    if st.button("🗑️ Apagar Status"):
+        if status_para_apagar and status_para_apagar in st.session_state.status_list:
+            st.session_state.status_list.remove(status_para_apagar)
+            st.success(f"✅ Status '{status_para_apagar}' removido da lista.")
+        elif status_para_apagar == "":
+            st.warning("⚠️ Selecione um status para apagar.")
 
-            # Encontrar última linha ocupada na coluna A
-            last_row = ws.max_row
-            while last_row > 0 and ws.cell(row=last_row, column=1).value is None:
-                last_row -= 1
-            next_row = last_row + 1
+    st.markdown("---")
+    # Salvar todos os status no arquivo
+    if st.button("💾 Salvar Status no TXT"):
+        with open(arquivo_status, "w", encoding="utf-8") as f:
+            for status in st.session_state.status_list:
+                f.write(status + "\n")
+        st.success(f"✅ {len(st.session_state.status_list)} status salvos no arquivo '{arquivo_status}' com sucesso!")
 
-            # Inserir todos os novos status
-            for status in st.session_state.novos_status:
-                ws.cell(row=next_row, column=1, value="Status Andamento Obra")
-                ws.cell(row=next_row, column=2, value=status)
-                next_row += 1
-
-            wb.save(file_path)
-            st.success(f"✅ {len(st.session_state.novos_status)} status salvos no Excel com sucesso!")
-
-            # Limpar a lista de novos status na sessão
-            st.session_state.novos_status = []
-
-            # Recarregar a lista imediatamente
-            df_updated = pd.read_excel(file_path, sheet_name=selected_sheet)
-            df_clean = df_updated.iloc[:, [0, 1]].dropna()
-            df_clean.columns = ['Metrica', 'Valor']
-            status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
-
-            # Mostrar lista atualizada
-            st.experimental_rerun()  # força a atualização imediata
 
 
 
