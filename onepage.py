@@ -103,18 +103,28 @@ df_clean.columns = ['Metrica', 'Valor']
 
 dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()}
 
-def get_value(key, default="N/A"):
-    return dados.get(key, default)
+# -------------------- Funções auxiliares melhoradas --------------------
+def get_value(key, default=0):
+    """Retorna o valor da métrica, tratando NaN e células vazias"""
+    val = dados.get(key, default)
+    if pd.isna(val) or val == "":
+        return default
+    return val
 
 def format_money(value):
-    if isinstance(value, (int, float)):
-        return f"R$ {value:,.0f}".replace(',', '.')
-    return str(value)
-
-def format_percent(value):
+    """Formata valores monetários, mesmo se vierem como string"""
     try:
         if isinstance(value, (int, float)):
-            # Todos os valores do Excel em formato % chegam como decimais (0.85 = 85%)
+            return f"R$ {value:,.0f}".replace(',', '.')
+        # tenta converter string numérica
+        return f"R$ {float(str(value).replace('.', '').replace(',', '.')):,.0f}".replace(',', '.')
+    except:
+        return "N/A"
+
+def format_percent(value):
+    """Formata valores percentuais"""
+    try:
+        if isinstance(value, (int, float)):
             return f"{value*100:.2f}%"
         return str(value)
     except:
@@ -152,21 +162,19 @@ cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área
 cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Privativa</p><p class="metric-value">{format_money(get_value("Custo Área Privativa"))}</p></div>', unsafe_allow_html=True)
 
 
-# -------------------- Análise Financeira --------------------
+# -------------------- Métricas financeiras --------------------
 st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
 
-# Primeira linha
 cols1 = st.columns(3)
 cols1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
 cols1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
 cols1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value("Custo Final"))}</p></div>', unsafe_allow_html=True)
 
-# Segunda linha
 cols2 = st.columns(4)
 cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{format_money(get_value("Desvio"))}</p></div>', unsafe_allow_html=True)
 cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
 cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
+cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{format_money(get_value("Índice Econômico"))}</p></div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- Barra de progresso (Avanço Físico) --------------------
