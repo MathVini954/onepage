@@ -298,14 +298,14 @@ if "novos_status" not in st.session_state:
     st.session_state.novos_status = []
 
 with st.expander("📌 Ver / Editar Status", expanded=False):
-    # Mostrar status existentes do Excel
+    # Recarregar status do Excel
     df_updated = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
     df_clean = df_updated.iloc[:, [0, 1]].dropna()
     df_clean.columns = ['Metrica', 'Valor']
     status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
 
-    # Mostrar todos status: mais recentes no topo
-    todos_status = list(reversed(status_rows['Valor'].tolist())) + list(reversed(st.session_state.novos_status))
+    # Lista combinada: novos status da sessão + existentes do Excel
+    todos_status = list(reversed(st.session_state.novos_status)) + list(reversed(status_rows['Valor'].tolist()))
     if todos_status:
         for i, status in enumerate(todos_status, 1):
             st.markdown(f"**{i}.** {status}")
@@ -345,8 +345,18 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
             wb.save(file_path)
             st.success(f"✅ {len(st.session_state.novos_status)} status salvos no Excel com sucesso!")
 
-            # Limpar a lista de novos status
+            # Limpar a lista de novos status na sessão
             st.session_state.novos_status = []
+
+            # Recarregar a lista imediatamente
+            df_updated = pd.read_excel(file_path, sheet_name=selected_sheet)
+            df_clean = df_updated.iloc[:, [0, 1]].dropna()
+            df_clean.columns = ['Metrica', 'Valor']
+            status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
+
+            # Mostrar lista atualizada
+            st.experimental_rerun()  # força a atualização imediata
+
 
 
 st.markdown("""---""")
