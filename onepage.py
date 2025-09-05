@@ -1,190 +1,181 @@
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-from datetime import datetime
-import os
+import streamlit as st 
+import pandas as pd 
+import plotly.graph_objects as go 
+from datetime import datetime 
+import os 
+import openpyxl 
 
 # -------------------- Configuração da página --------------------
-st.set_page_config(
-    page_title="ONE PAGE - ENGENHARIA",
-    page_icon="🏗️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config( 
+    page_title="ONE PAGE - ENGENHARIA", 
+    page_icon="🏗️", 
+    layout="wide", 
+    initial_sidebar_state="expanded" 
+) 
 
 # -------------------- Estilos CSS --------------------
-st.markdown("""
-<style>
-.main-header {
-    font-size: 2.8rem;
-    color: #1E3A8A;
-    font-weight: 800;
-    margin-bottom: 2rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 3px solid #3B82F6;
-    text-align: center;
-}
-.sub-header {
-    font-size: 1.8rem;
-    color: #E5E8DD; /* Branco Nuvem */
-    font-weight: 700;
-    margin: 2rem 0 1.5rem 0;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid #5DAAAB; /* Azul Céu */
-}
-
-.metric-card {
-    background-color: #1A253C; /* Azul Escuro */
-    border-radius: 0.75rem;
-    padding: 1rem;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    height: 100%;
-    border-left: 5px solid #5DAAAB; /* Azul Céu */
-    margin-bottom: 1rem;
-}
-.metric-title {
-    font-size: 1rem;
-    color: #5DAAAB; /* Azul Céu */
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-.metric-value {
-    font-size: 1.6rem;
-    color: #E5E8DD; /* Branco Nuvem */
-    font-weight: 800;
-}
-.section-container {
-    background-color: #1A253C; /* Azul Escuro */
-    border-radius: 1rem;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.4);
-}
-.progress-wrapper {
-    background-color: #1A253C; /* Azul Escuro */
-    border-radius: 20px;
-    padding: 5px;
-    width: 100%;
-}
-.progress-bar {
-    height: 30px;
-    border-radius: 20px;
-    text-align: center;
-    font-weight: bold;
-    color: #E5E8DD; /* Branco Nuvem */
-    line-height: 30px;
-}
-</style>
-""", unsafe_allow_html=True)
+st.markdown(""" 
+<style> 
+.main-header { 
+    font-size: 2.8rem; 
+    color: #1E3A8A; 
+    font-weight: 800; 
+    margin-bottom: 2rem; 
+    padding-bottom: 0.5rem; 
+    border-bottom: 3px solid #3B82F6; 
+    text-align: center; 
+} 
+.sub-header { 
+    font-size: 1.8rem; 
+    color: #E5E8DD; /* Branco Nuvem */ 
+    font-weight: 700; 
+    margin: 2rem 0 1.5rem 0; 
+    padding-bottom: 0.5rem; 
+    border-bottom: 2px solid #5DAAAB; /* Azul Céu */ 
+} 
+.metric-card { 
+    background-color: #1d2f57; /* Azul Fundo do Mar */ 
+    border-radius: 0.75rem; 
+    padding: 1rem; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+    height: 100%; 
+    border-left: 5px solid #5DAAAB; /* Azul Céu */ 
+    margin-bottom: 1rem; 
+} 
+.metric-title { 
+    font-size: 1rem; 
+    color: #5DAAAB; /* Azul Céu */ 
+    font-weight: 600; 
+    margin-bottom: 0.5rem; 
+} 
+.metric-value { 
+    font-size: 1.6rem; 
+    color: #E5E8DD; /* Branco Nuvem */ 
+    font-weight: 800; 
+} 
+.section-container { 
+    background-color: #1A253C; /* Azul Escuro */ 
+    border-radius: 1rem; 
+    padding: 1.5rem; 
+    margin-bottom: 2rem; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.4); 
+} 
+.progress-wrapper { 
+    background-color: #1d2f57; /* Azul Escuro */ 
+    border-radius: 20px; 
+    padding: 5px; 
+    width: 100%; 
+} 
+.progress-bar { 
+    height: 30px; 
+    border-radius: 20px; 
+    text-align: center; 
+    font-weight: bold; 
+    color: #E5E8DD; /* Branco Nuvem */ 
+    line-height: 30px; 
+} 
+</style> 
+""", unsafe_allow_html=True) 
 
 # -------------------- Sidebar (filtro + logo empresa) --------------------
-logo_empresa_path = "empresa_logo.png"
-if os.path.exists(logo_empresa_path):
-    st.sidebar.image(logo_empresa_path, width=200)
+logo_empresa_path = "empresa_logo.png" 
+if os.path.exists(logo_empresa_path): 
+    st.sidebar.image(logo_empresa_path, width=200) 
 
-st.sidebar.markdown("### 📂 Selecione a Obra - Jul/25")
+st.sidebar.markdown("### 📂 Selecione a Obra - Jul/25") 
 
-file_path = "ONE_PAGE.xlsx"
-if not os.path.exists(file_path):
-    st.error("❌ Arquivo ONE_PAGE.xlsx não encontrado no diretório!")
-    st.stop()
+file_path = "ONE_PAGE.xlsx" 
+if not os.path.exists(file_path): 
+    st.error("❌ Arquivo ONE_PAGE.xlsx não encontrado no diretório!") 
+    st.stop() 
 
-excel_file = pd.ExcelFile(file_path)
-sheet_names = excel_file.sheet_names
-selected_sheet = st.sidebar.selectbox("Obra:", sheet_names)
-
-
+excel_file = pd.ExcelFile(file_path) 
+sheet_names = excel_file.sheet_names 
+selected_sheet = st.sidebar.selectbox("Obra:", sheet_names) 
 
 # -------------------- Carregar dados --------------------
-df = pd.read_excel(file_path, sheet_name=selected_sheet)
-df_clean = df.iloc[:, [0, 1]].dropna()
-df_clean.columns = ['Metrica', 'Valor']
+df = pd.read_excel(file_path, sheet_name=selected_sheet) 
+df_clean = df.iloc[:, [0, 1]].dropna() 
+df_clean.columns = ['Metrica', 'Valor'] 
+dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()} 
 
-dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()}
+def get_value(key, default="N/A"): 
+    return dados.get(key, default) 
 
-def get_value(key, default="N/A"):
-    return dados.get(key, default)
+def format_money(value): 
+    if isinstance(value, (int, float)): 
+        return f"R$ {value:,.0f}".replace(',', '.') 
+    return str(value) 
 
-def format_money(value):
-    if isinstance(value, (int, float)):
-        return f"R$ {value:,.0f}".replace(',', '.')
-    return str(value)
+def format_percent(value): 
+    try: 
+        if isinstance(value, (int, float)): 
+            # Todos os valores do Excel em formato % chegam como decimais (0.85 = 85%) 
+            return f"{value*100:.2f}%" 
+        return str(value) 
+    except: 
+        return "N/A" 
 
-def format_percent(value):
-    if isinstance(value, (int, float)) and value <= 1:
-        return f"{value*100:.1f}%"
-    elif isinstance(value, (int, float)):
-        return f"{value:.1f}%"
-    return str(value)
-
-def to_float(val):
-    if isinstance(val, str):
-        try:
-            return float(val.replace('R$', '').replace('.', '').replace(',', '.'))
-        except:
-            return 0
-    return val if isinstance(val, (int,float)) else 0
+def to_float(val): 
+    if isinstance(val, str): 
+        try: 
+            return float(val.replace('R$', '').replace('.', '').replace(',', '.')) 
+        except: 
+            return 0 
+    return val if isinstance(val, (int,float)) else 0 
 
 # -------------------- Logo da obra --------------------
-obra_logo_path = f"{selected_sheet}.png"
-if os.path.exists(obra_logo_path):
-    st.image(obra_logo_path, width=350)
+obra_logo_path = f"{selected_sheet}.png" 
+if os.path.exists(obra_logo_path): 
+    st.image(obra_logo_path, width=350) 
 
 # -------------------- Métricas Principais --------------------
-st.markdown('<p class="sub-header">📊 Dados do Empreendimento</p>', unsafe_allow_html=True)
-cols = st.columns(4)
-
-cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Área Construída (m²)</p><p class="metric-value">{get_value("Área Construída (m²)")}</p></div>', unsafe_allow_html=True)
-cols[1].markdown(f'<div class="metric-card"><p class="metric-title">Área Privativa (m²)</p><p class="metric-value">{get_value("Área Privativa (m²)")}</p></div>', unsafe_allow_html=True)
-cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Eficiência</p><p class="metric-value">{format_percent(get_value("Eficiência"))}</p></div>',unsafe_allow_html=True)
-cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Unidades</p><p class="metric-value">{get_value("Unidades")}</p></div>', unsafe_allow_html=True)
-
+st.markdown('<p class="sub-header">📊 Dados do Empreendimento</p>', unsafe_allow_html=True) 
+cols = st.columns(4) 
+cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Área Construída (m²)</p><p class="metric-value">{get_value("Área Construída (m²)")}</p></div>', unsafe_allow_html=True) 
+cols[1].markdown(f'<div class="metric-card"><p class="metric-title">Área Privativa (m²)</p><p class="metric-value">{get_value("Área Privativa (m²)")}</p></div>', unsafe_allow_html=True) 
+cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Eficiência</p><p class="metric-value">{format_percent(get_value("Eficiência"))}</p></div>',unsafe_allow_html=True) 
+cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Unidades</p><p class="metric-value">{get_value("Unidades")}</p></div>', unsafe_allow_html=True) 
 
 # -------------------- Segunda linha de métricas --------------------
-cols2 = st.columns(4)
-
-cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentabilidade Viabilidade"))}</p></div>', unsafe_allow_html=True)
-cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Projetada</p><p class="metric-value">{format_percent(get_value("Rentabilidade Projetada"))}</p></div>', unsafe_allow_html=True)
-cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Construída</p><p class="metric-value">{format_money(get_value("Custo Área Construída"))}</p></div>', unsafe_allow_html=True)
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Privativa</p><p class="metric-value">{format_money(get_value("Custo Área Privativa"))}</p></div>', unsafe_allow_html=True)
-
+cols2 = st.columns(4) 
+cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentabilidade Viabilidade"))}</p></div>', unsafe_allow_html=True) 
+cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Projetada</p><p class="metric-value">{format_percent(get_value("Rentabilidade Projetada"))}</p></div>', unsafe_allow_html=True) 
+cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Construída</p><p class="metric-value">{format_money(get_value("Custo Área Construída"))}</p></div>', unsafe_allow_html=True) 
+cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Privativa</p><p class="metric-value">{format_money(get_value("Custo Área Privativa"))}</p></div>', unsafe_allow_html=True) 
 
 # -------------------- Análise Financeira --------------------
-st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True) 
 
 # Primeira linha
-cols1 = st.columns(3)
-cols1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
-cols1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
-cols1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value("Custo Final"))}</p></div>', unsafe_allow_html=True)
+cols1 = st.columns(3) 
+cols1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True) 
+cols1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True) 
+cols1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value("Custo Final"))}</p></div>', unsafe_allow_html=True) 
 
 # Segunda linha
-cols2 = st.columns(4)
-cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{format_money(get_value("Desvio"))}</p></div>', unsafe_allow_html=True)
-cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
-cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+cols2 = st.columns(4) 
+cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{format_money(get_value("Desvio"))}</p></div>', unsafe_allow_html=True) 
+cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True) 
+cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True) 
+cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True) 
+st.markdown('</div>', unsafe_allow_html=True) 
 
 # -------------------- Barra de progresso (Avanço Físico) --------------------
 st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
 
-av_real_num = to_float(get_value("Avanço Físico Real", 0))
-av_plan_num = to_float(get_value("Avanço Físico Planejado", 0))
-aderencia_num = to_float(get_value("Aderência Física", 0))
-
-if av_real_num <= 1: av_real_num *= 100
-if av_plan_num <= 1: av_plan_num *= 100
-if aderencia_num <= 1: aderencia_num *= 100
+av_real_num = get_value("Avanço Físico Real", 0)
+av_plan_num = get_value("Avanço Físico Planejado", 0)
+aderencia_num = get_value("Aderência Física", 0)
 
 st.markdown(f"""
 <div class="progress-wrapper">
-    <div class="progress-bar" style="width: {av_real_num}%; background: #3B82F6;">
-        Real: {av_real_num:.1f}%
+    <div class="progress-bar" style="width: {av_real_num*100:.0f}%; background: #3B82F6;">
+        Real: {format_percent(av_real_num)}
     </div>
 </div>
-<p style="color:#EF4444;font-weight:600;">Planejado: {av_plan_num:.1f}%</p>
-<p style="color:#10B981;font-weight:600;">Aderência: {aderencia_num:.1f}%</p>
+<p style="color:#EF4444;font-weight:600;">Planejado: {format_percent(av_plan_num)}</p>
+<p style="color:#10B981;font-weight:600;">Aderência: {format_percent(aderencia_num)}</p>
 """, unsafe_allow_html=True)
 
 # -------------------- Linha do Tempo --------------------
@@ -285,6 +276,4 @@ if not status_rows.empty:
             st.markdown(f"**{i}.** {status}")
 else:
     st.info("Nenhum status de andamento disponível para esta obra.")
-
-
 
