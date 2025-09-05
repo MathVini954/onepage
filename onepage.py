@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 import os
-import openpyxl
 
 # -------------------- Configuração da página --------------------
 st.set_page_config(
@@ -35,7 +34,7 @@ st.markdown("""
 }
 
 .metric-card {
-    background-color: #1d2f57; /* Azul Fundo do Mar */
+    background-color: #1A253C; /* Azul Escuro */
     border-radius: 0.75rem;
     padding: 1rem;
     box-shadow: 0 4px 6px rgba(0,0,0,0.3);
@@ -62,7 +61,7 @@ st.markdown("""
     box-shadow: 0 4px 6px rgba(0,0,0,0.4);
 }
 .progress-wrapper {
-    background-color: #1d2f57; /* Azul Escuro */
+    background-color: #1A253C; /* Azul Escuro */
     border-radius: 20px;
     padding: 5px;
     width: 100%;
@@ -103,48 +102,28 @@ df_clean.columns = ['Metrica', 'Valor']
 
 dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()}
 
-# -------------------- Funções auxiliares melhoradas --------------------
-def get_value(key, default=0):
-    """Retorna o valor da métrica, tratando NaN e células vazias"""
-    val = dados.get(key, default)
-    if pd.isna(val) or val == "":
-        return default
-    return val
+def get_value(key, default="N/A"):
+    return dados.get(key, default)
 
 def format_money(value):
-    """Formata valores monetários, mesmo se vierem como string"""
-    try:
-        if isinstance(value, (int, float)):
-            return f"R$ {value:,.0f}".replace(',', '.')
-        # tenta converter string numérica
-        return f"R$ {float(str(value).replace('.', '').replace(',', '.')):,.0f}".replace(',', '.')
-    except:
-        return "N/A"
+    if isinstance(value, (int, float)):
+        return f"R$ {value:,.0f}".replace(',', '.')
+    return str(value)
 
 def format_percent(value):
-    """Formata valores percentuais"""
-    try:
-        if isinstance(value, (int, float)):
-            return f"{value*100:.2f}%"
-        return str(value)
-    except:
-        return "N/A"
+    if isinstance(value, (int, float)) and value <= 1:
+        return f"{value*100:.1f}%"
+    elif isinstance(value, (int, float)):
+        return f"{value:.1f}%"
+    return str(value)
 
-def to_float(val, decimals=2):
-
-    try:
-        if isinstance(val, (int, float)):
-            return round(float(val), decimals)
-        elif isinstance(val, str):
-            cleaned = val.replace('R$', '').replace('.', '').replace(',', '.').strip()
-            if cleaned == "":
-                return 0
-            return round(float(cleaned), decimals)
-        else:
+def to_float(val):
+    if isinstance(val, str):
+        try:
+            return float(val.replace('R$', '').replace('.', '').replace(',', '.'))
+        except:
             return 0
-    except:
-        return 0
-
+    return val if isinstance(val, (int,float)) else 0
 
 # -------------------- Logo da obra --------------------
 obra_logo_path = f"{selected_sheet}.png"
@@ -170,38 +149,43 @@ cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área
 cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Privativa</p><p class="metric-value">{format_money(get_value("Custo Área Privativa"))}</p></div>', unsafe_allow_html=True)
 
 
-# -------------------- Métricas financeiras --------------------
+# -------------------- Análise Financeira --------------------
 st.markdown('<p class="sub-header">💰 Análise Financeira</p>', unsafe_allow_html=True)
 
+# Primeira linha
 cols1 = st.columns(3)
 cols1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
 cols1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
 cols1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value("Custo Final"))}</p></div>', unsafe_allow_html=True)
 
+# Segunda linha
 cols2 = st.columns(4)
 cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{format_money(get_value("Desvio"))}</p></div>', unsafe_allow_html=True)
 cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
 cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{to_float(get_value("Índice Econômico"))}</p></div>', unsafe_allow_html=True)
+cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- Barra de progresso (Avanço Físico) --------------------
 st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
 
-av_real_num = get_value("Avanço Físico Real", 0)
-av_plan_num = get_value("Avanço Físico Planejado", 0)
-aderencia_num = get_value("Aderência Física", 0)
+av_real_num = to_float(get_value("Avanço Físico Real", 0))
+av_plan_num = to_float(get_value("Avanço Físico Planejado", 0))
+aderencia_num = to_float(get_value("Aderência Física", 0))
+
+if av_real_num <= 1: av_real_num *= 100
+if av_plan_num <= 1: av_plan_num *= 100
+if aderencia_num <= 1: aderencia_num *= 100
 
 st.markdown(f"""
 <div class="progress-wrapper">
-    <div class="progress-bar" style="width: {av_real_num*100:.0f}%; background: #3B82F6;">
-        Real: {format_percent(av_real_num)}
+    <div class="progress-bar" style="width: {av_real_num}%; background: #3B82F6;">
+        Real: {av_real_num:.1f}%
     </div>
 </div>
-<p style="color:#EF4444;font-weight:600;">Planejado: {format_percent(av_plan_num)}</p>
-<p style="color:#10B981;font-weight:600;">Aderência: {format_percent(aderencia_num)}</p>
+<p style="color:#EF4444;font-weight:600;">Planejado: {av_plan_num:.1f}%</p>
+<p style="color:#10B981;font-weight:600;">Aderência: {aderencia_num:.1f}%</p>
 """, unsafe_allow_html=True)
-
 
 # -------------------- Linha do Tempo --------------------
 st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
@@ -289,95 +273,18 @@ if len(valid_cards) >= 2:
 else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
 
-
-# -------------------- Configuração da obra --------------------
-obra = "ESSENZA"
-pasta_obra = f"obras/{obra}"
-arquivo_status = os.path.join(pasta_obra, "status.txt")
-
-# Criar pasta se não existir
-os.makedirs(pasta_obra, exist_ok=True)
-
-# Inicializa lista de status na sessão
-if "status_list" not in st.session_state:
-    if os.path.exists(arquivo_status):
-        with open(arquivo_status, "r", encoding="utf-8") as f:
-            st.session_state.status_list = [linha.strip() for linha in f if linha.strip()]
-    else:
-        st.session_state.status_list = []
-
+# -------------------- Status do Andamento da Obra --------------------
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
-with st.expander("📌 Ver / Editar Status", expanded=True):
-    # Mostrar status com checkboxes
-    status_para_apagar = []
-    if st.session_state.status_list:
-        for i, status in enumerate(st.session_state.status_list):
-            col1, col2 = st.columns([0.05, 0.95])
-            with col1:
-                checked = st.checkbox("", key=f"chk_{i}")
-            with col2:
-                st.markdown(f"{i+1}. {status}")
-            if checked:
-                status_para_apagar.append(status)
+status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
 
-    st.markdown("---")
-    # Input para adicionar novo status
-    novo_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
+if not status_rows.empty:
+    status_list = status_rows['Valor'].tolist()
+    with st.expander("📌 Ver Status Completo", expanded=False):
+        for i, status in enumerate(status_list, 1):
+            st.markdown(f"**{i}.** {status}")
+else:
+    st.info("Nenhum status de andamento disponível para esta obra.")
 
-    # Botões
-    col_salvar, col_apagar = st.columns(2)
-    with col_salvar:
-        if st.button("💾 Salvar Status no TXT"):
-            # Adiciona novo status se não estiver vazio
-            if novo_status.strip():
-                st.session_state.status_list.append(novo_status.strip())
 
-            # Gravar todos os status no TXT
-            with open(arquivo_status, "w", encoding="utf-8") as f:
-                for status in st.session_state.status_list:
-                    f.write(status + "\n")
-
-            st.success(f"✅ {len(st.session_state.status_list)} status salvos no arquivo '{arquivo_status}'!")
-
-    with col_apagar:
-        if st.button("🗑️ Apagar selecionados"):
-            if status_para_apagar:
-                for s in status_para_apagar:
-                    if s in st.session_state.status_list:
-                        st.session_state.status_list.remove(s)
-                # Atualiza TXT
-                with open(arquivo_status, "w", encoding="utf-8") as f:
-                    for status in st.session_state.status_list:
-                        f.write(status + "\n")
-                st.success(f"✅ {len(status_para_apagar)} status apagados e arquivo atualizado!")
-            else:
-                st.warning("⚠️ Selecione ao menos um status para apagar.")
-
-    st.markdown("---")
-    # Botão para baixar TXT
-    if st.session_state.status_list:
-        with open(arquivo_status, "r", encoding="utf-8") as f:
-            txt_bytes = f.read().encode('utf-8')
-        st.download_button(
-            label="📥 Baixar status.txt",
-            data=txt_bytes,
-            file_name=f"{obra}_status.txt",
-            mime="text/plain"
-        )
-
-st.markdown("""---""")
-
-st.markdown(
-    """
-    <div style='text-align: center; font-size: 14px; color: gray; padding-top: 20px;'>
-        <i>"Inspirados pelo que te faz bem"</i>
-        <br>
-        Desenvolvido por <b>Matheus Vinicio</b> — Engenharia
-        <br>
-        © 2025 <a href='https://www.rioave.com.br/' target='_blank' style='color: gray; text-decoration: none;'><b>RIO AVE</b></a>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 
