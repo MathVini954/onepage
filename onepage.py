@@ -294,19 +294,34 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
         if new_status.strip() != "":
             import openpyxl
 
-            # Carrega workbook
+            # Carregar workbook
             wb = openpyxl.load_workbook("ONE_PAGE.xlsx")
             ws = wb[selected_sheet]
 
-            # Inserir na próxima linha vazia
-            next_row = ws.max_row + 1
+            # Encontrar última linha realmente preenchida na coluna A
+            last_row = ws.max_row
+            while last_row > 0 and ws.cell(row=last_row, column=1).value is None:
+                last_row -= 1
+            next_row = last_row + 1
+
+            # Inserir novo status
             ws.cell(row=next_row, column=1, value="Status Andamento Obra")
             ws.cell(row=next_row, column=2, value=new_status.strip())
 
-            # Salva de volta
+            # Salvar workbook
             wb.save("ONE_PAGE.xlsx")
 
-            st.success("✅ Novo status salvo com sucesso! Atualize a página para visualizar.")
+            # Recarregar dataframe atualizado
+            df_updated = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
+            df_clean = df_updated.iloc[:, [0, 1]].dropna()
+            df_clean.columns = ['Metrica', 'Valor']
+            status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
+
+            st.success("✅ Novo status salvo com sucesso!")
+
+            # Mostrar lista atualizada logo abaixo
+            for i, status in enumerate(status_rows['Valor'], 1):
+                st.markdown(f"**{i}.** {status}")
         else:
             st.warning("⚠️ Digite algum valor antes de salvar.")
 
