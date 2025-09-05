@@ -174,7 +174,7 @@ cols2 = st.columns(4)
 cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{format_money(get_value("Desvio"))}</p></div>', unsafe_allow_html=True)
 cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True)
 cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True)
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{format_money(get_value("Índice Econômico"))}</p></div>', unsafe_allow_html=True)
+cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{to_float(get_value("Índice Econômico"))}</p></div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- Barra de progresso (Avanço Físico) --------------------
