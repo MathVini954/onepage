@@ -290,16 +290,18 @@ else:
     st.info("Não há datas suficientes para criar a linha do tempo.")
 
 
-# Configurações
+import streamlit as st
+import os
+
+# -------------------- Configuração da obra --------------------
 obra = "ESSENZA"
 pasta_obra = f"obras/{obra}"
 arquivo_status = os.path.join(pasta_obra, "status.txt")
 
 # Criar pasta se não existir
-if not os.path.exists(pasta_obra):
-    os.makedirs(pasta_obra)
+os.makedirs(pasta_obra, exist_ok=True)
 
-# Inicializar lista de status na sessão
+# Inicializa lista de status na sessão
 if "status_list" not in st.session_state:
     if os.path.exists(arquivo_status):
         with open(arquivo_status, "r", encoding="utf-8") as f:
@@ -322,13 +324,14 @@ with st.expander("📌 Ver / Editar Status", expanded=True):
     # Apagar status
     status_para_apagar = st.selectbox("Selecionar status para apagar", [""] + st.session_state.status_list)
 
+    st.markdown("---")
     # Botão Salvar
     if st.button("💾 Salvar Status no TXT"):
-        # Adiciona o novo status à lista se não estiver vazio
+        # Adiciona novo status se não estiver vazio
         if novo_status.strip():
             st.session_state.status_list.append(novo_status.strip())
-        
-        # Apagar status selecionado
+
+        # Remove status selecionado se houver
         if status_para_apagar and status_para_apagar in st.session_state.status_list:
             st.session_state.status_list.remove(status_para_apagar)
 
@@ -338,6 +341,19 @@ with st.expander("📌 Ver / Editar Status", expanded=True):
                 f.write(status + "\n")
 
         st.success(f"✅ {len(st.session_state.status_list)} status salvos no arquivo '{arquivo_status}'!")
+
+    st.markdown("---")
+    # Botão para baixar o arquivo TXT
+    if st.session_state.status_list:
+        with open(arquivo_status, "r", encoding="utf-8") as f:
+            txt_bytes = f.read().encode('utf-8')
+        st.download_button(
+            label="📥 Baixar status.txt",
+            data=txt_bytes,
+            file_name=f"{obra}_status.txt",
+            mime="text/plain"
+        )
+
 
 
 
