@@ -130,13 +130,21 @@ def format_percent(value):
     except:
         return "N/A"
 
-def to_float(val):
-    if isinstance(val, str):
-        try:
-            return float(val.replace('R$', '').replace('.', '').replace(',', '.'))
-        except:
+def to_float(val, decimals=2):
+
+    try:
+        if isinstance(val, (int, float)):
+            return round(float(val), decimals)
+        elif isinstance(val, str):
+            cleaned = val.replace('R$', '').replace('.', '').replace(',', '.').strip()
+            if cleaned == "":
+                return 0
+            return round(float(cleaned), decimals)
+        else:
             return 0
-    return val if isinstance(val, (int,float)) else 0
+    except:
+        return 0
+
 
 # -------------------- Logo da obra --------------------
 obra_logo_path = f"{selected_sheet}.png"
