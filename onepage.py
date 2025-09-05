@@ -169,9 +169,11 @@ if df.shape[1] >= 4:  # Verifica se existem pelo menos 4 colunas
     df_fin2 = df.iloc[:, [2, 3]].dropna()
     df_fin2.columns = ['Metrica', 'Valor']
 
-    # Função para pegar valor pelo título
+    # Função robusta para pegar valor pelo título
     def get_value_fin2(key, default="N/A"):
-        row = df_fin2[df_fin2['Metrica'].str.strip() == key]
+        key = str(key).strip()
+        df_fin2['Metrica'] = df_fin2['Metrica'].astype(str).str.strip()
+        row = df_fin2[df_fin2['Metrica'] == key]
         if not row.empty:
             return row['Valor'].values[0]
         return default
@@ -180,7 +182,6 @@ if df.shape[1] >= 4:  # Verifica se existem pelo menos 4 colunas
     col_fin2_1 = st.columns(3)
     col_fin2_2 = st.columns(4)
 
-    # Ajuste os nomes conforme os títulos que você tem na coluna C
     col_fin2_1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
     col_fin2_1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
     col_fin2_1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value_fin2("Custo Final"))}</p></div>', unsafe_allow_html=True)
