@@ -145,7 +145,7 @@ cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área
 cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Privativa</p><p class="metric-value">{format_money(get_value("Custo Área Privativa"))}</p></div>', unsafe_allow_html=True) 
 
 # -------------------- Análise Financeira --------------------
-st.markdown('<p class="sub-header">💰 Análise Financeira - Engenharia</p>', unsafe_allow_html=True) 
+st.markdown('<p class="sub-header">💰 Custo - Engenharia</p>', unsafe_allow_html=True) 
 
 # Primeira linha
 cols1 = st.columns(3) 
@@ -162,15 +162,17 @@ cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Eco
 st.markdown('</div>', unsafe_allow_html=True) 
 
 # -------------------- Segunda Análise Financeira --------------------
-st.markdown('<p class="sub-header">💰 Análise Financeira - Financeiro</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">💰 Custo - Financeiro</p>', unsafe_allow_html=True)
 
 # Pegar os títulos e valores das colunas C e D
 if df.shape[1] >= 4:  # Verifica se existem pelo menos 4 colunas
     df_fin2 = df.iloc[:, [2, 3]].dropna()
     df_fin2.columns = ['Metrica', 'Valor']
 
-    # Função robusta para pegar valor pelo título
+    # Função para pegar valor pelo título, exceto Orçamento Base
     def get_value_fin2(key, default="N/A"):
+        if key == "Orçamento Base":
+            return get_value("Orçamento Base")  # pega da primeira análise
         key = str(key).strip()
         df_fin2['Metrica'] = df_fin2['Metrica'].astype(str).str.strip()
         row = df_fin2[df_fin2['Metrica'] == key]
@@ -182,7 +184,7 @@ if df.shape[1] >= 4:  # Verifica se existem pelo menos 4 colunas
     col_fin2_1 = st.columns(3)
     col_fin2_2 = st.columns(4)
 
-   cols1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True) 
+    col_fin2_1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
     col_fin2_1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
     col_fin2_1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value_fin2("Custo Final"))}</p></div>', unsafe_allow_html=True)
 
@@ -190,6 +192,7 @@ if df.shape[1] >= 4:  # Verifica se existem pelo menos 4 colunas
     col_fin2_2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value_fin2("Desembolso"))}</p></div>', unsafe_allow_html=True)
     col_fin2_2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value_fin2("Saldo"))}</p></div>', unsafe_allow_html=True)
     col_fin2_2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value_fin2("Índice Econômico")}</p></div>', unsafe_allow_html=True)
+
 
 
 # -------------------- Barra de progresso (Avanço Físico) --------------------
