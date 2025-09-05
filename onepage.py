@@ -277,16 +277,7 @@ else:
 # -------------------- Status do Andamento da Obra --------------------
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
-# Filtrar status existentes
-status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
-
 with st.expander("📌 Ver / Editar Status", expanded=False):
-    # Mostrar status existentes
-    if not status_rows.empty:
-        for i, status in enumerate(status_rows['Valor'], 1):
-            st.markdown(f"**{i}.** {status}")
-
-    st.markdown("---")
     # Input para adicionar novo status
     new_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
 
@@ -304,26 +295,25 @@ with st.expander("📌 Ver / Editar Status", expanded=False):
                 last_row -= 1
             next_row = last_row + 1
 
-            # Inserir na coluna A (título) e B (conteúdo)
+            # Inserir novo status
             ws.cell(row=next_row, column=1, value="Status Andamento Obra")
             ws.cell(row=next_row, column=2, value=new_status.strip())
 
-            # Salvar de volta no Excel
             wb.save(file_path)
-
-            # Recarregar dataframe para mostrar imediatamente
-            df_updated = pd.read_excel(file_path, sheet_name=selected_sheet)
-            df_clean = df_updated.iloc[:, [0, 1]].dropna()
-            df_clean.columns = ['Metrica', 'Valor']
-            status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
 
             st.success("✅ Novo status salvo com sucesso!")
 
-            # Mostrar lista atualizada
-            for i, status in enumerate(status_rows['Valor'], 1):
-                st.markdown(f"**{i}.** {status}")
-        else:
-            st.warning("⚠️ Digite algum valor antes de salvar.")
+    # Sempre recarrega do Excel para mostrar lista atualizada
+    df_updated = pd.read_excel("ONE_PAGE.xlsx", sheet_name=selected_sheet)
+    df_clean = df_updated.iloc[:, [0, 1]].dropna()
+    df_clean.columns = ['Metrica', 'Valor']
+    status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
+
+    # Mostrar status existentes (já atualizado)
+    if not status_rows.empty:
+        for i, status in enumerate(status_rows['Valor'], 1):
+            st.markdown(f"**{i}.** {status}")
+
 
 
 
