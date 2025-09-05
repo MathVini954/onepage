@@ -293,40 +293,40 @@ else:
 import streamlit as st
 import os
 
-# -------------------- Configurações --------------------
+
+# Configurações
 obra = "ESSENZA"
 pasta_obra = f"obras/{obra}"
 arquivo_status = os.path.join(pasta_obra, "status.txt")
 
-# Garantir que a pasta exista
 if not os.path.exists(pasta_obra):
     os.makedirs(pasta_obra)
 
-# Inicializar lista de status na sessão
+# Inicializa lista de status
 if "status_list" not in st.session_state:
-    # Ler status do arquivo, se existir
     if os.path.exists(arquivo_status):
         with open(arquivo_status, "r", encoding="utf-8") as f:
-            st.session_state.status_list = [linha.strip() for linha in f.readlines() if linha.strip()]
+            st.session_state.status_list = [linha.strip() for linha in f if linha.strip()]
     else:
         st.session_state.status_list = []
 
 st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
 
 with st.expander("📌 Ver / Editar Status", expanded=True):
-    # Mostrar lista de status
+    # Mostrar lista atual
     if st.session_state.status_list:
         for i, status in enumerate(st.session_state.status_list, 1):
             st.markdown(f"**{i}.** {status}")
 
     st.markdown("---")
-    # Adicionar novo status
+    # Input para adicionar novo status
     novo_status = st.text_area("Adicionar novo status", placeholder="Digite aqui o novo status...")
 
+    # Botão para adicionar status à lista
     if st.button("➕ Adicionar Status"):
         if novo_status.strip():
             st.session_state.status_list.append(novo_status.strip())
-            st.success("✅ Status adicionado (ainda não salvo no arquivo).")
+            st.success("✅ Status adicionado à lista!")
         else:
             st.warning("⚠️ Digite algum valor antes de adicionar.")
 
@@ -341,12 +341,13 @@ with st.expander("📌 Ver / Editar Status", expanded=True):
             st.warning("⚠️ Selecione um status para apagar.")
 
     st.markdown("---")
-    # Salvar todos os status no arquivo
+    # Botão salvar todos os status no TXT
     if st.button("💾 Salvar Status no TXT"):
+        # Grava a lista atual da sessão
         with open(arquivo_status, "w", encoding="utf-8") as f:
             for status in st.session_state.status_list:
                 f.write(status + "\n")
-        st.success(f"✅ {len(st.session_state.status_list)} status salvos no arquivo '{arquivo_status}' com sucesso!")
+        st.success(f"✅ {len(st.session_state.status_list)} status salvos no arquivo '{arquivo_status}'!")
 
 
 
