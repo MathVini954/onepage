@@ -1,14 +1,25 @@
-# src/excel_reader.py
 from __future__ import annotations
 
 from pathlib import Path
+import html
 
 import pandas as pd
-from openpyxl import load_workbook
-from openpyxl.workbook.workbook import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
+import plotly.graph_objects as go
+import streamlit as st
 
+from src.excel_reader import (
+    load_wb,
+    sheetnames,
+    read_resumo_financeiro,
+    read_indice,
+    read_financeiro,
+    read_prazo,
+    read_acrescimos_economias,
+)
+
+from src.logos import find_logo_path
 from src.utils import norm, is_blank, to_month, to_float, fmt_brl
+
 
 
 def load_wb(path: str | Path) -> Workbook:
