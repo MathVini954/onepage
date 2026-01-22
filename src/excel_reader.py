@@ -182,18 +182,19 @@ def read_financeiro(ws: Worksheet) -> pd.DataFrame:
 def read_prazo(ws: Worksheet) -> pd.DataFrame:
     hr, row_vals = _find_header_row(
         ws,
-        ["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)"],
+        ["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)"],"PREVISTO MENSAL(%)",
         max_row=350,
         max_col=30,
     )
     if hr is None or row_vals is None:
-        return pd.DataFrame(columns=["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)"])
+        return pd.DataFrame(columns=["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", "PREVISTO MENSAL(%)"])
 
     c_mes = _col_idx(row_vals, "MÊS")
     c_p = _col_idx(row_vals, "PLANEJADO MÊS (%)")
     c_r = _col_idx(row_vals, "REALIZADO Mês (%)")
+    c_s = _col_idx(row_vals, "PREVISTO MENSAL(%)")
     if c_mes is None or c_p is None or c_r is None:
-        return pd.DataFrame(columns=["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)"])
+        return pd.DataFrame(columns=["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", "PREVISTO MENSAL(%)"])
 
     data = []
     r = hr + 1
@@ -206,6 +207,7 @@ def read_prazo(ws: Worksheet) -> pd.DataFrame:
                 "MÊS": to_month(mes),
                 "PLANEJADO MÊS (%)": to_float(ws.cell(r, c_p).value),
                 "REALIZADO Mês (%)": to_float(ws.cell(r, c_r).value),
+                "PREVISTO MENSAL(%)": to_float(ws.cell(r, c_r).value)
             }
         )
         r += 1
