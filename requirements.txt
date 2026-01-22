@@ -1,4 +1,5 @@
-plotly
-pandas
-streamlit
-openpyxl
+streamlit>=1.36
+pandas>=2.2
+openpyxl>=3.1
+plotly>=5.22
+pillow>=10.4
