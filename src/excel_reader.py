@@ -125,15 +125,15 @@ def _find_header_row(ws: Worksheet, must_contain_any: list[str], max_scan: int =
 
 
 def read_indice(ws: Worksheet) -> pd.DataFrame:
-    header_row = _find_header_row(ws, ["MES", "INDICE PROJETADO"], max_scan=300)
+    header_row = _find_header_row(ws, ["MÊS", "ÍNDICE PROJETADO"], max_scan=300)
     if header_row is None:
         return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
 
     # 🔥 antes estava limitado (10 col). Agora varre bem mais
     cols = _map_cols(ws, header_row, max_col=60)
 
-    c_mes = _find_col(cols, "MES")
-    c_idx = _find_col(cols, "INDICE", "PROJETADO")
+    c_mes = _find_col(cols, "MÊS")
+    c_idx = _find_col(cols, "íNDICE", "PROJETADO")
 
     # fallback (caso o merge atrapalhe o header)
     if c_mes is None:
