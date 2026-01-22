@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <link rel="manifest" href="./manifest.json" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>Controle Prazo e Custo</title>
+
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b1220; }
+      iframe { border: 0; width: 100%; height: 100%; }
+    </style>
+  </head>
+
+  <body>
+    <iframe src="https://SUA_URL_DO_STREAMLIT_AQUI" allow="clipboard-read; clipboard-write"></iframe>
+
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js");
+      }
+    </script>
+  </body>
+</html>
