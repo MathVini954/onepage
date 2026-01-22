@@ -722,7 +722,7 @@ with tab_dash:
 
     st.divider()
 
-       st.divider()
+   
 
     # ====== Detalhamento completo com degradê
     st.subheader("Detalhamento — Tabelas completas (com barras em degradê)")
