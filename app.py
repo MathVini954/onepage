@@ -410,7 +410,7 @@ if not df_prazo.empty and "MÊS" in df_prazo.columns:
 
     temp["PLAN_M"] = temp.get("PLANEJADO MÊS (%)", pd.NA).apply(to_ratio)
     temp["REAL_M"] = temp.get("REALIZADO Mês (%)", pd.NA).apply(to_ratio)
-    temp["PREV_M"] = temp.get("PREVISTO MENSAL (%)", pd.NA).apply(to_ratio)
+    temp["PREV_M"] = temp.get("PREVISTO MENSAL(%)", pd.NA).apply(to_ratio)
 
     # acumulados
     if "PLANEJADO ACUM. (%)" in temp.columns:
