@@ -7,7 +7,7 @@ import streamlit as st
 st.set_page_config(page_title="Controle Prazo & Custo", layout="wide")
 
 # 🔥 SAFE MODE: deixe True até o app voltar a aparecer
-SAFE_MODE = True
+SAFE_MODE = FALSE
 
 st.title("Controle de Prazo e Custo" + (" (SAFE MODE)" if SAFE_MODE else ""))
 
