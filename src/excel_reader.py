@@ -53,17 +53,16 @@ def _to_float(x: Any) -> float | None:
         if not s:
             return None
 
-        # remove "R$" etc
         s = s.replace("R$", "").replace(" ", "")
 
-        # caso "1,0055" (vírgula decimal, sem milhar)
+        # caso "1,0055" (vírgula decimal sem milhar)
         if "," in s and "." not in s:
             try:
                 return float(s.replace(",", "."))
             except Exception:
                 return None
 
-        # caso padrão BR "1.234.567,89"
+        # caso BR "1.234.567,89"
         try:
             s2 = s.replace(".", "").replace(",", ".")
             return float(s2)
@@ -83,14 +82,14 @@ def _to_month(x: Any) -> pd.Timestamp | None:
         if x is None:
             return None
 
-        # datetime/date do Excel
+        # datetime/date
         if hasattr(x, "year") and hasattr(x, "month"):
             dt = pd.Timestamp(x)
             if pd.isna(dt):
                 return None
             return pd.Timestamp(year=dt.year, month=dt.month, day=1)
 
-        # serial do Excel (número)
+        # serial do Excel
         if isinstance(x, (int, float)):
             if x <= 0:
                 return None
@@ -144,19 +143,23 @@ def load_wb(path: str | Path):
 
 
 def sheetnames(wb) -> list[str]:
+    """
+    Retorna apenas as abas das OBRAS.
+    Ignora LEIA-ME e ORÇAMENTO_RESUMO (que é só para a tela Resumo Obras).
+    """
+    IGNORAR = {"LEIA-ME", "LEIA ME", "README", "ORÇAMENTO_RESUMO", "ORCAMENTO_RESUMO"}
     out: list[str] = []
     for name in wb.sheetnames:
-        n = _norm(name)
-        if n in {"LEIA-ME", "LEIA ME", "README"}:
+        if _norm(name) in {_norm(x) for x in IGNORAR}:
             continue
-        if n.startswith("_"):
+        if _norm(name).startswith("_"):
             continue
         out.append(name)
     return out
 
 
 # ============================================================
-# Leitores
+# Leitores (mesma lógica de antes: por aba da OBRA)
 # ============================================================
 def read_resumo_financeiro(ws: Worksheet) -> dict[str, float | None]:
     wanted = {
@@ -169,7 +172,7 @@ def read_resumo_financeiro(ws: Worksheet) -> dict[str, float | None]:
         "VARIAÇÃO (R$)",
     }
     out: dict[str, float | None] = {}
-    for r in range(1, min(ws.max_row or 1, 120) + 1):
+    for r in range(1, min(ws.max_row or 1, 200) + 1):
         label = ws.cell(r, 1).value
         if not isinstance(label, str):
             continue
@@ -181,7 +184,8 @@ def read_resumo_financeiro(ws: Worksheet) -> dict[str, float | None]:
 
 def read_indice(ws: Worksheet) -> pd.DataFrame:
     """
-    Procura a linha de header que contém MÊS e ÍNDICE PROJETADO (ignorando título mesclado).
+    Lê a tabela 'MÊS' x 'ÍNDICE PROJETADO' ignorando o título mesclado.
+    Procura a linha que contém MES e INDICE PROJETADO na mesma linha.
     """
     max_r = min(ws.max_row or 1, 400)
     max_c = min(ws.max_column or 1, 160)
@@ -215,7 +219,6 @@ def read_indice(ws: Worksheet) -> pd.DataFrame:
         mes = ws.cell(r, col_mes).value
         idx = ws.cell(r, col_idx).value
 
-        # para quando o mês acabar (permite adicionar mais linhas no fim)
         if _is_blank(mes):
             blank_mes_run += 1
             if blank_mes_run >= 4:
@@ -226,7 +229,7 @@ def read_indice(ws: Worksheet) -> pd.DataFrame:
         m = _to_month(mes)
         v = _to_float(idx)
 
-        # ignora vazios/zeros (evita “pontos fantasmas” e escala errada)
+        # ignora vazios/zeros
         if m is None or v is None or float(v) == 0.0:
             continue
 
@@ -250,18 +253,26 @@ def read_financeiro(ws: Worksheet) -> pd.DataFrame:
 
     for r in range(1, max_r + 1):
         found_des = found_med = False
+        c_mes_tmp = None
+        c_des_tmp = None
+        c_med_tmp = None
+
         for c in range(1, max_c + 1):
             v = _norm(ws.cell(r, c).value)
+            if v == "MES":
+                c_mes_tmp = c
             if "DESEMBOLSO" in v and "MES" in v:
                 found_des = True
-                col_des = c
+                c_des_tmp = c
             if "MEDIDO" in v and "MES" in v:
                 found_med = True
-                col_med = c
-            if v == "MES":
-                col_mes = c
-        if found_des and found_med and col_mes is not None:
+                c_med_tmp = c
+
+        if found_des and found_med and c_mes_tmp is not None:
             header_row = r
+            col_mes = c_mes_tmp
+            col_des = c_des_tmp
+            col_med = c_med_tmp
             break
 
     if header_row is None or col_mes is None or col_des is None or col_med is None:
@@ -295,32 +306,37 @@ def read_financeiro(ws: Worksheet) -> pd.DataFrame:
 
 def read_prazo(ws: Worksheet) -> pd.DataFrame:
     """
-    Procura header do prazo por termos:
-      MES, PLANEJADO, REALIZADO e PREVISTO
+    Procura header do prazo por:
+      MES, PLANEJADO (MES/ACUM), REALIZADO e PREVISTO MENSAL (opcional)
+    Aceita header como "PREVISTO MENSAL(%)" também.
     """
     max_r = min(ws.max_row or 1, 900)
-    max_c = min(ws.max_column or 1, 160)
+    max_c = min(ws.max_column or 1, 180)
 
     header_row = None
     c_mes = c_pa = c_pm = c_rm = c_prev = None
 
     for r in range(1, max_r + 1):
-        row_vals = {c: _norm(ws.cell(r, c).value) for c in range(1, max_c + 1)}
-        # acha colunas por header
-        for c, v in row_vals.items():
+        for c in range(1, max_c + 1):
+            v = _norm(ws.cell(r, c).value)
+
             if v == "MES":
                 c_mes = c
+
             if "PLANEJADO" in v and "ACUM" in v:
                 c_pa = c
-            if "PLANEJADO" in v and "MES" in v:
+
+            # Planejado mês: precisa ter PLANEJADO + MES e NÃO ser ACUM
+            if "PLANEJADO" in v and "MES" in v and "ACUM" not in v:
                 c_pm = c
+
             if "REALIZADO" in v:
                 c_rm = c
+
             if "PREVISTO" in v and "MENSAL" in v:
                 c_prev = c
 
-        if c_mes and c_pm and c_rm:
-            # previsto é opcional (mas tentamos)
+        if c_mes is not None and c_pm is not None and c_rm is not None:
             header_row = r
             break
 
@@ -333,6 +349,7 @@ def read_prazo(ws: Worksheet) -> pd.DataFrame:
     blank_mes_run = 0
     for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
         mes = ws.cell(r, c_mes).value
+
         if _is_blank(mes):
             blank_mes_run += 1
             if blank_mes_run >= 6:
@@ -362,12 +379,12 @@ def read_prazo(ws: Worksheet) -> pd.DataFrame:
 
 def read_acrescimos_economias(ws: Worksheet) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Acha uma linha que tenha 2x 'DESCRIÇÃO' (uma pra acréscimos e outra pra economias).
+    Acha uma linha que tenha 2x 'DESCRIÇÃO' (acr/eco).
     Lê 6 colunas por lado:
       DESCRIÇÃO, ORÇAMENTO INICIAL, ORÇAMENTO REAJUSTADO, CUSTO FINAL, VARIAÇÃO, JUSTIFICATIVAS
     """
-    max_r = min(ws.max_row or 1, 1500)
-    max_c = min(ws.max_column or 1, 160)
+    max_r = min(ws.max_row or 1, 2000)
+    max_c = min(ws.max_column or 1, 220)
 
     header_row = None
     start1 = start2 = None
@@ -416,46 +433,56 @@ def read_acrescimos_economias(ws: Worksheet) -> tuple[pd.DataFrame, pd.DataFrame
 
         return pd.DataFrame(rows, columns=cols)
 
-    
-
     df_acres = read_side(start1)
     df_econ = read_side(start2)
     return df_acres, df_econ
-    
-      import pandas as pd
 
+
+# ============================================================
+# NOVO: ORÇAMENTO_RESUMO (somente para a aba "Resumo Obras")
+# ============================================================
 def read_orcamento_resumo(wb) -> pd.DataFrame:
     """
-    Lê a aba ORÇAMENTO_RESUMO.
-    Não interfere em nada do Dashboard/Justificativas (é usada só na aba Resumo Obras).
+    Lê a aba ORÇAMENTO_RESUMO (não interfere em nada do Dashboard/Justificativas).
+    Esperado: primeira coluna OBRA, depois meses, e última coluna VARIAÇÃO.
     """
-    if "ORÇAMENTO_RESUMO" not in wb.sheetnames:
+    candidates = ["ORÇAMENTO_RESUMO", "ORCAMENTO_RESUMO"]
+    sheet = None
+    for s in candidates:
+        if s in wb.sheetnames:
+            sheet = s
+            break
+    if sheet is None:
         return pd.DataFrame()
 
-    ws = wb["ORÇAMENTO_RESUMO"]
+    ws = wb[sheet]
 
-    # acha linha do header procurando "OBRA"
+    # acha o header procurando "OBRA" em alguma célula da linha
     header_row = None
-    for r in range(1, 80):  # varre o topo (pode aumentar se quiser)
-        row_vals = []
-        for c in range(1, 60):
-            v = ws.cell(row=r, column=c).value
-            row_vals.append(str(v).strip().upper() if v is not None else "")
-        if "OBRA" in row_vals:
+    max_r = min(ws.max_row or 1, 120)
+    max_c = min(ws.max_column or 1, 250)
+
+    for r in range(1, max_r + 1):
+        found = False
+        for c in range(1, max_c + 1):
+            if _norm(ws.cell(r, c).value) == "OBRA":
+                found = True
+                break
+        if found:
             header_row = r
             break
 
     if header_row is None:
         return pd.DataFrame()
 
-    # captura headers até acabar
+    # lê cabeçalhos até acabar (colunas)
     headers = []
     last_col = 0
-    for c in range(1, 200):
-        v = ws.cell(row=header_row, column=c).value
+    for c in range(1, max_c + 1):
+        v = ws.cell(header_row, c).value
         if v is None or str(v).strip() == "":
-            # para quando começar a dar vazio depois de já ter cabeçalho
-            if c > 1 and last_col > 0:
+            if last_col > 0:
+                # se já começou e encontrou vazio, encerra
                 break
             continue
         headers.append(str(v).strip())
@@ -464,14 +491,14 @@ def read_orcamento_resumo(wb) -> pd.DataFrame:
     if not headers:
         return pd.DataFrame()
 
-    # lê linhas até achar “vazios em sequência”
+    # lê linhas até acabar
     data = []
     empty_streak = 0
     for r in range(header_row + 1, header_row + 1 + 5000):
         row = []
         all_empty = True
         for c in range(1, last_col + 1):
-            v = ws.cell(row=r, column=c).value
+            v = ws.cell(r, c).value
             if v is not None and str(v).strip() != "":
                 all_empty = False
             row.append(v)
@@ -481,14 +508,13 @@ def read_orcamento_resumo(wb) -> pd.DataFrame:
             if empty_streak >= 3:
                 break
             continue
+
         empty_streak = 0
         data.append(row)
 
     df = pd.DataFrame(data, columns=headers)
 
-    # padroniza "OBRA" (se vier com espaços)
     if "OBRA" in df.columns:
         df["OBRA"] = df["OBRA"].astype(str).str.strip()
 
     return df
-
