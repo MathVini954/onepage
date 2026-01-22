@@ -730,12 +730,12 @@ with tab_dash:
     # ✅ 3 cards (ANTES dos 2 gráficos do detalhamento)
     row3 = st.columns(3)
     with row3[0]:
-        kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
+        kpi_card_money_highlight("Total Economias (ACM)", total_economias, PALETTE["good"])
     with row3[1]:
-        kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
+        kpi_card_money_highlight("Total Acréscimos (ACM)", total_acrescimos, PALETTE["bad"])
     with row3[2]:
         color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
-        kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
+        kpi_card_money_highlight("Desvio Orçamento (Acrésc. − Econ.)", desvio_liquido, color_desvio)
 
     st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
