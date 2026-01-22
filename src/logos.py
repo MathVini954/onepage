@@ -1,29 +1,26 @@
-# src/logos.py
 from __future__ import annotations
+
 from pathlib import Path
 
-LOGO_EXTS = [".png", ".jpg", ".jpeg", ".webp"]
-
-def _candidates(name: str) -> list[str]:
-    n = name.strip()
-    return list(dict.fromkeys([
-        n,
-        n.upper(),
-        n.lower(),
-        n.replace(" ", "_"),
-        n.replace(" ", "-"),
-        n.upper().replace(" ", "_"),
-        n.upper().replace(" ", "-"),
-    ]))
 
 def find_logo_path(sheet_name: str, logos_dir: str = "assets/logos") -> str | None:
+    """
+    Procura uma logo com o MESMO nome da aba (case-insensitive).
+    Ex: aba "BOSSA" -> assets/logos/BOSSA.png (ou .jpg/.jpeg/.webp)
+    """
     base = Path(logos_dir)
     if not base.exists():
         return None
 
-    for cand in _candidates(sheet_name):
-        for ext in LOGO_EXTS:
-            p = base / f"{cand}{ext}"
-            if p.exists():
-                return str(p)
+    target = sheet_name.strip().lower()
+    exts = [".png", ".jpg", ".jpeg", ".webp"]
+
+    for p in base.iterdir():
+        if not p.is_file():
+            continue
+        if p.suffix.lower() not in exts:
+            continue
+        if p.stem.strip().lower() == target:
+            return str(p)
+
     return None
