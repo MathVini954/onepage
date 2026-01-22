@@ -957,23 +957,44 @@ with tab_resumo:
         )
 
         if obra_sel:
-            with st.expander(f"Ver detalhes — {obra_sel}", expanded=True):
-                # lê a aba da obra selecionada (mesma lógica do Dashboard)
-                ws_det = wb[obra_sel]
-                df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
+with st.expander(f"Ver detalhes — {obra_sel}", expanded=True):
+    ws_det = wb[obra_sel]
+    df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
 
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown("### ACRÉSCIMOS / DESVIOS (mês)")
-                    if df_acres_det is None or df_acres_det.empty:
-                        st.info("Sem dados.")
-                    else:
-                        styled_dataframe(df_acres_det)
+    # Top N dos cards (igual ao print)
+    top_cards = 3  # pode mudar pra 5 se quiser
 
-                with c2:
-                    st.markdown("### ECONOMIAS (mês)")
-                    if df_econ_det is None or df_econ_det.empty:
-                        st.info("Sem dados.")
-                    else:
-                        styled_dataframe(df_econ_det)
+    econ_items = []
+    if df_econ_det is not None and not df_econ_det.empty and "VARIAÇÃO" in df_econ_det.columns:
+        econ_sorted = df_econ_det.copy()
+        econ_sorted["__v"] = pd.to_numeric(econ_sorted["VARIAÇÃO"], errors="coerce")
+        econ_sorted = econ_sorted.dropna(subset=["__v"])
+        econ_sorted["__abs"] = econ_sorted["__v"].abs()
+        econ_sorted = econ_sorted.sort_values("__abs", ascending=False).head(top_cards)
+        for _, r in econ_sorted.iterrows():
+            econ_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+
+    acres_items = []
+    if df_acres_det is not None and not df_acres_det.empty and "VARIAÇÃO" in df_acres_det.columns:
+        acres_sorted = df_acres_det.copy()
+        acres_sorted["__v"] = pd.to_numeric(acres_sorted["VARIAÇÃO"], errors="coerce")
+        acres_sorted = acres_sorted.dropna(subset=["__v"])
+        acres_sorted["__abs"] = acres_sorted["__v"].abs()
+        acres_sorted = acres_sorted.sort_values("__abs", ascending=False).head(top_cards)
+        for _, r in acres_sorted.iterrows():
+            acres_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+
+    econ_rows = build_rows(econ_items, color=PALETTE["good"], prefix="")
+    acres_rows = build_rows(acres_items, color=PALETTE["bad"], prefix="- ")
+
+    st.markdown(
+        card_resumo("PRINCIPAIS ECONOMIAS", "✅", econ_rows, PALETTE["good_border"], PALETTE["good_bg"]),
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    st.markdown(
+        card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]),
+        unsafe_allow_html=True,
+    )
+
 
