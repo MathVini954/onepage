@@ -722,20 +722,22 @@ with tab_dash:
 
     st.divider()
 
+       st.divider()
+
     # ====== Detalhamento completo com degradê
     st.subheader("Detalhamento — Tabelas completas (com barras em degradê)")
 
-            # ✅ 3 cards (agora ficam antes dos gráficos de barras)
-        row3 = st.columns(3)
-        with row3[0]:
-            kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
-        with row3[1]:
-            kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
-        with row3[2]:
-            color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
-            kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
+    # ✅ 3 cards (ANTES dos 2 gráficos do detalhamento)
+    row3 = st.columns(3)
+    with row3[0]:
+        kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
+    with row3[1]:
+        kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
+    with row3[2]:
+        color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
+        kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
 
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
 
@@ -802,6 +804,7 @@ with tab_dash:
 
             with st.expander("Ver tabela (Economias)"):
                 styled_dataframe(show_top.drop(columns=["__abs"], errors="ignore"))
+
 
 
 # ============================================================
