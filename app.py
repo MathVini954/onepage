@@ -849,31 +849,24 @@ if debug:
     st.write("Arquivo:", excel_path.name)
     st.write("Obras:", obras)
     st.write("df_idx.head():", df_idx.head() if df_idx is not None else None)
- # ============================================================
-# TAB Resumo Obras (ORÇAMENTO_RESUMO)
-# ============================================================
-    with tab_resumo:
-        st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
+with tab_resumo:
+    st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
 
-             if df_orc_resumo is None or df_orc_resumo.empty:
-                   st.info("A aba **ORÇAMENTO_RESUMO** não foi encontrada ou está vazia.")
-     else:
+    if df_orc_resumo is None or df_orc_resumo.empty:
+        st.info("A aba **ORÇAMENTO_RESUMO** não foi encontrada ou está vazia.")
+    else:
         df_show = df_orc_resumo.copy()
 
-        # garante OBRA como texto
         if "OBRA" in df_show.columns:
             df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
 
-        # todas as outras colunas (meses + VARIAÇÃO) como número
         num_cols = [c for c in df_show.columns if c != "OBRA"]
         for c in num_cols:
             df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
 
-        # formatação BRL igual ao resto do app
         fmt_map = {c: fmt_brl for c in num_cols}
         st.dataframe(
             df_show.style.format(fmt_map),
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
         )
-
