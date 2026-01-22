@@ -15,7 +15,9 @@ from src.excel_reader import (
     read_financeiro,
     read_prazo,
     read_acrescimos_economias,
+    read_orcamento_resumo,   # <- NOVO
 )
+
 from src.logos import find_logo_path
 from src.utils import fmt_brl
 
