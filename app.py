@@ -131,13 +131,42 @@ PLOTLY_TEMPLATE = PALETTE["plotly_template"]
 st.markdown(
     f"""
 <style>
-  .stApp {{
-    background: {PALETTE["bg"]};
-    color: {PALETTE["text"]};
+  /* Fundo geral (garante que o claro cubra tudo) */
+  html, body, [data-testid="stAppViewContainer"], .stApp {{
+    background: {PALETTE["bg"]} !important;
+    color: {PALETTE["text"]} !important;
   }}
+
+  /* Header/topbar do Streamlit (tira o “preto” no modo claro) */
+  header[data-testid="stHeader"] {{
+    background: {PALETTE["bg"]} !important;
+    border-bottom: 1px solid {PALETTE["border"]} !important;
+  }}
+
+  /* Sidebar */
   section[data-testid="stSidebar"] > div {{
-    background: {PALETTE["sidebar_bg"]};
+    background: {PALETTE["sidebar_bg"]} !important;
+    border-right: 1px solid {PALETTE["border"]} !important;
   }}
+
+  /* Força contraste no texto do sidebar */
+  section[data-testid="stSidebar"] * {{
+    color: {PALETTE["text"]} !important;
+  }}
+  section[data-testid="stSidebar"] label,
+  section[data-testid="stSidebar"] small,
+  section[data-testid="stSidebar"] p {{
+    color: {PALETTE["muted"]} !important;
+  }}
+
+  /* Inputs (selectbox, etc) no modo claro: fundo mais “premium” */
+  section[data-testid="stSidebar"] div[data-baseweb="select"] > div {{
+    background: {PALETTE["card"]} !important;
+    border: 1px solid {PALETTE["border"]} !important;
+    border-radius: 12px !important;
+  }}
+
+  /* Container principal com espaçamento bom */
   .block-container {{
     padding-top: 1.25rem;
     padding-bottom: 2rem;
@@ -146,6 +175,7 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
 
 
 def apply_plotly_theme(fig: go.Figure) -> go.Figure:
