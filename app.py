@@ -104,7 +104,7 @@ def kpi_card(label: str, value: float | None):
         <div style="
             border: 1px solid rgba(255,255,255,0.10);
             border-radius: 8px;
-            padding: 8px 10px;
+            padding: 6px 8px;
             background: rgba(255,255,255,0.03);
             height: 100px;
         ">
