@@ -385,7 +385,7 @@ if not df_idx.empty and "ÍNDICE PROJETADO" in df_idx.columns:
 
 
 # ============================================================
-# PRAZO (aderência do mês + previsto)
+# PRAZO (aderência do mês + previsto)  ✅ FIX AttributeError
 # ============================================================
 ref_month_label = "—"
 k_real_acum = k_plan_acum = k_prev_acum = None
@@ -408,20 +408,33 @@ if not df_prazo.empty and "MÊS" in df_prazo.columns:
             return pd.NA
         return v if v <= 1.5 else (v / 100.0)
 
-    temp["PLAN_M"] = temp.get("PLANEJADO MÊS (%)", pd.NA).apply(to_ratio)
-    temp["REAL_M"] = temp.get("REALIZADO Mês (%)", pd.NA).apply(to_ratio)
-    temp["PREV_M"] = temp.get("PREVISTO MENSAL(%)", pd.NA).apply(to_ratio)
+    # ✅ garante Series mesmo se a coluna não existir
+    def col_series(df: pd.DataFrame, name: str) -> pd.Series:
+        if name in df.columns:
+            return df[name]
+        return pd.Series([pd.NA] * len(df), index=df.index)
+
+    # nomes possíveis do previsto
+    prev_col = None
+    for cand in ["PREVISTO MENSAL (%)", "PREVISTO MENSAL(%)", "COMPROMETIDO MÊS (%)", "COMPROMETIDO MES (%)"]:
+        if cand in temp.columns:
+            prev_col = cand
+            break
+
+    temp["PLAN_M"] = col_series(temp, "PLANEJADO MÊS (%)").apply(to_ratio)
+    temp["REAL_M"] = col_series(temp, "REALIZADO Mês (%)").apply(to_ratio)
+    temp["PREV_M"] = (col_series(temp, prev_col).apply(to_ratio) if prev_col else col_series(temp, "__NA__"))
 
     # acumulados
     if "PLANEJADO ACUM. (%)" in temp.columns:
-        temp["PLAN_A"] = temp["PLANEJADO ACUM. (%)"].apply(to_ratio)
+        temp["PLAN_A"] = col_series(temp, "PLANEJADO ACUM. (%)").apply(to_ratio)
     else:
         temp["PLAN_A"] = pd.to_numeric(temp["PLAN_M"], errors="coerce").cumsum(skipna=True)
 
     temp["REAL_A"] = pd.to_numeric(temp["REAL_M"], errors="coerce").cumsum(skipna=True)
     temp["PREV_A"] = pd.to_numeric(temp["PREV_M"], errors="coerce").cumsum(skipna=True)
 
-    # ✅ cortar no último mês com valor REAL/PLAN/PREV (ignora trailing 0 de fórmula)
+    # ✅ cortar no último mês com valor REAL/PLAN/PREV (evita repetir último mês pra frente)
     def last_meaningful_idx(s: pd.Series) -> int | None:
         s2 = pd.to_numeric(s, errors="coerce")
         ok = s2.notna() & (s2.abs() > 1e-9)
@@ -476,6 +489,7 @@ if not df_prazo.empty and "MÊS" in df_prazo.columns:
             k_ader_acc = k_real_acum / k_plan_acum
         if k_plan_m and k_plan_m != 0:
             k_ader_mes = k_real_m / k_plan_m
+
 
 
 # ============================================================
