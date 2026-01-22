@@ -865,8 +865,33 @@ with tab_resumo:
             df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
 
         fmt_map = {c: fmt_brl for c in num_cols}
+                fmt_map = {c: fmt_brl for c in num_cols}
+
+        def style_variacao(s: pd.Series):
+            # s é a coluna VARIAÇÃO
+            v = pd.to_numeric(s, errors="coerce")
+            styles = []
+            for x in v:
+                if pd.isna(x):
+                    styles.append("")
+                elif x > 0:
+                    # pior: vermelho vibrante
+                    styles.append("background-color:#ef4444; color:white; font-weight:900;")
+                elif x < 0:
+                    # melhor: verde vibrante
+                    styles.append("background-color:#22c55e; color:white; font-weight:900;")
+                else:
+                    styles.append("background-color:#94a3b8; color:white; font-weight:900;")
+            return styles
+
+        styler = df_show.style.format(fmt_map)
+
+        # aplica só na coluna VARIAÇÃO (se existir)
+        if "VARIAÇÃO" in df_show.columns:
+            styler = styler.apply(style_variacao, subset=["VARIAÇÃO"])
+
         st.dataframe(
-            df_show.style.format(fmt_map),
+            styler,
             use_container_width=True,
             hide_index=True,
         )
