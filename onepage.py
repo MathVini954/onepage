@@ -1,313 +1,194 @@
-import streamlit as st 
-import pandas as pd 
-import plotly.graph_objects as go 
-from datetime import datetime 
-import os 
-import openpyxl 
+# app.py
+from __future__ import annotations
+from pathlib import Path
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
 
-# -------------------- Configuração da página --------------------
-st.set_page_config( 
-    page_title="ONE PAGE - ENGENHARIA", 
-    page_icon="🏗️", 
-    layout="wide", 
-    initial_sidebar_state="expanded" 
-) 
+from src.excel_reader import (
+    load_wb, sheetnames, read_resumo_financeiro, read_indice, read_financeiro,
+    read_prazo, read_acrescimos_economias
+)
+from src.logos import find_logo_path
+from src.utils import fmt_brl, fmt_pct
 
-# -------------------- Estilos CSS --------------------
-st.markdown(""" 
-<style> 
-.main-header { 
-    font-size: 2.8rem; 
-    color: #1E3A8A; 
-    font-weight: 800; 
-    margin-bottom: 2rem; 
-    padding-bottom: 0.5rem; 
-    border-bottom: 3px solid #3B82F6; 
-    text-align: center; 
-} 
-.sub-header { 
-    font-size: 1.8rem; 
-    color: #E5E8DD; /* Branco Nuvem */ 
-    font-weight: 700; 
-    margin: 2rem 0 1.5rem 0; 
-    padding-bottom: 0.5rem; 
-    border-bottom: 2px solid #5DAAAB; /* Azul Céu */ 
-} 
-.metric-card { 
-    background-color: #1d2f57; /* Azul Fundo do Mar */ 
-    border-radius: 0.75rem; 
-    padding: 1rem; 
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
-    height: 100%; 
-    border-left: 5px solid #5DAAAB; /* Azul Céu */ 
-    margin-bottom: 1rem; 
-} 
-.metric-title { 
-    font-size: 1rem; 
-    color: #5DAAAB; /* Azul Céu */ 
-    font-weight: 600; 
-    margin-bottom: 0.5rem; 
-} 
-.metric-value { 
-    font-size: 1.6rem; 
-    color: #E5E8DD; /* Branco Nuvem */ 
-    font-weight: 800; 
-} 
-.section-container { 
-    background-color: #1A253C; /* Azul Escuro */ 
-    border-radius: 1rem; 
-    padding: 1.5rem; 
-    margin-bottom: 2rem; 
-    box-shadow: 0 4px 6px rgba(0,0,0,0.4); 
-} 
-.progress-wrapper { 
-    background-color: #1d2f57; /* Azul Escuro */ 
-    border-radius: 20px; 
-    padding: 5px; 
-    width: 100%; 
-} 
-.progress-bar { 
-    height: 30px; 
-    border-radius: 20px; 
-    text-align: center; 
-    font-weight: bold; 
-    color: #E5E8DD; /* Branco Nuvem */ 
-    line-height: 30px; 
-} 
-</style> 
-""", unsafe_allow_html=True) 
+st.set_page_config(page_title="Prazo & Custo", layout="wide")
 
-# -------------------- Sidebar (filtro + logo empresa) --------------------
-logo_empresa_path = "empresa_logo.png" 
-if os.path.exists(logo_empresa_path): 
-    st.sidebar.image(logo_empresa_path, width=200) 
+DATA_DIR = Path("data")
+LOGOS_DIR = "assets/logos"
 
-st.sidebar.markdown("### 🏗️ Selecione a Obra - Jul/25") 
+def list_data_files():
+    if not DATA_DIR.exists():
+        return []
+    return sorted([p.name for p in DATA_DIR.glob("*.xlsx")])
 
-file_path = "ONE_PAGE.xlsx" 
-if not os.path.exists(file_path): 
-    st.error("❌ Arquivo ONE_PAGE.xlsx não encontrado no diretório!") 
-    st.stop() 
+st.sidebar.title("Controle de Prazo e Custo")
 
-excel_file = pd.ExcelFile(file_path) 
-sheet_names = excel_file.sheet_names 
-selected_sheet = st.sidebar.selectbox("Obra:", sheet_names) 
+files = list_data_files()
+uploaded = st.sidebar.file_uploader("Ou faça upload do Excel (.xlsx)", type=["xlsx"])
 
-# -------------------- Carregar dados --------------------
-df = pd.read_excel(file_path, sheet_name=selected_sheet) 
-df_clean = df.iloc[:, [0, 1]].dropna() 
-df_clean.columns = ['Metrica', 'Valor'] 
-dados = {str(row['Metrica']).strip(): row['Valor'] for _, row in df_clean.iterrows()} 
+if uploaded is not None:
+    wb = load_wb(uploaded)
+    file_label = uploaded.name
+else:
+    if not files:
+        st.warning("Coloque um Excel em /data (ex: Jan.26.xlsx) ou faça upload pela sidebar.")
+        st.stop()
+    chosen = st.sidebar.selectbox("Arquivo do mês (pasta /data)", files, index=len(files)-1)
+    wb = load_wb(DATA_DIR / chosen)
+    file_label = chosen
 
-def get_value(key, default="N/A"): 
-    return dados.get(key, default) 
+obras = sheetnames(wb)
+obra = st.sidebar.selectbox("Obra (aba)", obras)
 
-def format_money(value): 
-    if isinstance(value, (int, float)): 
-        return f"R$ {value:,.0f}".replace(',', '.') 
-    return str(value) 
+top_opt = st.sidebar.selectbox("Mostrar Top", ["5", "10", "Todas"], index=0)
+top_n = None if top_opt == "Todas" else int(top_opt)
 
-def format_percent(value): 
-    try: 
-        if isinstance(value, (int, float)): 
-            # Todos os valores do Excel em formato % chegam como decimais (0.85 = 85%) 
-            return f"{value*100:.2f}%" 
-        return str(value) 
-    except: 
-        return "N/A" 
+ws = wb[obra]
 
-def to_float(val): 
-    if isinstance(val, str): 
-        try: 
-            return float(val.replace('R$', '').replace('.', '').replace(',', '.')) 
-        except: 
-            return 0 
-    return val if isinstance(val, (int,float)) else 0 
+# Header com logo
+colL, colR = st.columns([1, 4])
+with colL:
+    logo = find_logo_path(obra, LOGOS_DIR)
+    if logo:
+        st.image(logo, use_container_width=True)
+with colR:
+    st.title(f"{obra}")
+    st.caption(f"Arquivo: {file_label}")
 
-# -------------------- Logo da obra --------------------
-obra_logo_path = f"{selected_sheet}.png" 
-if os.path.exists(obra_logo_path): 
-    st.image(obra_logo_path, width=350) 
+# Leitura dos blocos
+resumo = read_resumo_financeiro(ws)
+df_idx = read_indice(ws)
+df_fin = read_financeiro(ws)
+df_prazo = read_prazo(ws)
+df_acres, df_econ = read_acrescimos_economias(ws)
 
-# -------------------- Métricas Principais --------------------
-st.markdown('<p class="sub-header">📊 Dados do Empreendimento</p>', unsafe_allow_html=True) 
-cols = st.columns(4) 
-cols[0].markdown(f'<div class="metric-card"><p class="metric-title">Área Construída (m²)</p><p class="metric-value">{get_value("Área Construída (m²)")}</p></div>', unsafe_allow_html=True) 
-cols[1].markdown(f'<div class="metric-card"><p class="metric-title">Área Privativa (m²)</p><p class="metric-value">{get_value("Área Privativa (m²)")}</p></div>', unsafe_allow_html=True) 
-cols[2].markdown(f'<div class="metric-card"><p class="metric-title">Eficiência</p><p class="metric-value">{format_percent(get_value("Eficiência"))}</p></div>',unsafe_allow_html=True) 
-cols[3].markdown(f'<div class="metric-card"><p class="metric-title">Unidades</p><p class="metric-value">{get_value("Unidades")}</p></div>', unsafe_allow_html=True) 
+# -------------------------
+# KPIs (cards)
+# -------------------------
+c1, c2, c3, c4 = st.columns(4)
 
-# -------------------- Segunda linha de métricas --------------------
-cols2 = st.columns(4) 
-cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Viabilidade</p><p class="metric-value">{format_percent(get_value("Rentabilidade Viabilidade"))}</p></div>', unsafe_allow_html=True) 
-cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Rentabilidade Projetada</p><p class="metric-value">{format_percent(get_value("Rentabilidade Projetada"))}</p></div>', unsafe_allow_html=True) 
-cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Construída</p><p class="metric-value">{format_money(get_value("Custo Área Construída"))}</p></div>', unsafe_allow_html=True) 
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Custo Área Privativa</p><p class="metric-value">{format_money(get_value("Custo Área Privativa"))}</p></div>', unsafe_allow_html=True) 
+orc_ini = resumo.get("ORÇAMENTO INICIAL (R$)")
+orc_reaj = resumo.get("ORÇAMENTO REAJUSTADO (R$)")
+des_acum = resumo.get("DESEMBOLSO ACUMULADO (R$)")
+custo_final = resumo.get("CUSTO FINAL (R$)")
+variacao = resumo.get("VARIAÇÃO (R$)")
 
-# -------------------- Análise Financeira --------------------
-st.markdown('<p class="sub-header">💰 Custo - Engenharia</p>', unsafe_allow_html=True) 
+with c1:
+    st.metric("Orçamento Reajustado", fmt_brl(orc_reaj), delta=None)
+with c2:
+    st.metric("Desembolso Acumulado", fmt_brl(des_acum), delta=None)
+with c3:
+    st.metric("Custo Final", fmt_brl(custo_final), delta=None)
+with c4:
+    st.metric("Variação", fmt_brl(variacao), delta=None)
 
-# Primeira linha
-cols1 = st.columns(3) 
-cols1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value("Orçamento Base"))}</p></div>', unsafe_allow_html=True) 
-cols1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True) 
-cols1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value("Custo Final"))}</p></div>', unsafe_allow_html=True) 
+st.divider()
 
-# Segunda linha
-cols2 = st.columns(4) 
-cols2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{format_money(get_value("Desvio"))}</p></div>', unsafe_allow_html=True) 
-cols2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value("Desembolso"))}</p></div>', unsafe_allow_html=True) 
-cols2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value("Saldo"))}</p></div>', unsafe_allow_html=True) 
-cols2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value("Índice Econômico")}</p></div>', unsafe_allow_html=True) 
-st.markdown('</div>', unsafe_allow_html=True) 
+# -------------------------
+# Gráficos: Índice / Financeiro / Prazo
+# -------------------------
+g1, g2 = st.columns(2)
 
-# -------------------- Segunda Análise Financeira --------------------
-st.markdown('<p class="sub-header">💰 Custo - Financeiro</p>', unsafe_allow_html=True)
+with g1:
+    st.subheader("Índice Projetado (baseline 1,000)")
+    if df_idx.empty:
+        st.info("Bloco de Índice não encontrado ou sem dados.")
+    else:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_idx["MÊS"], y=df_idx["ÍNDICE PROJETADO"],
+            mode="lines+markers", name="Índice Projetado"
+        ))
+        fig.add_hline(y=1.0, line_dash="dash", line_width=1)
+        fig.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig, use_container_width=True)
 
-# Pegar os títulos e valores das colunas C e D
-if df.shape[1] >= 4:  # Verifica se existem pelo menos 4 colunas
-    df_fin2 = df.iloc[:, [2, 3]].dropna()
-    df_fin2.columns = ['Metrica', 'Valor']
+with g2:
+    st.subheader("Desembolso x Medido (mês a mês)")
+    if df_fin.empty:
+        st.info("Bloco Financeiro não encontrado ou sem dados.")
+    else:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=df_fin["MÊS"], y=df_fin["DESEMBOLSO DO MÊS (R$)"], name="Desembolso"))
+        fig.add_trace(go.Bar(x=df_fin["MÊS"], y=df_fin["MEDIDO NO MÊS (R$)"], name="Medido"))
+        fig.update_layout(barmode="group", height=360, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Função para pegar valor pelo título, exceto Orçamento Base
-    def get_value_fin2(key, default="N/A"):
-        if key == "Orçamento Base":
-            return get_value("Orçamento Base")  # pega da primeira análise
-        key = str(key).strip()
-        df_fin2['Metrica'] = df_fin2['Metrica'].astype(str).str.strip()
-        row = df_fin2[df_fin2['Metrica'] == key]
-        if not row.empty:
-            return row['Valor'].values[0]
-        return default
-
-    # Criar 3 colunas para os primeiros 3 itens, depois mais 4 se houver
-    col_fin2_1 = st.columns(3)
-    col_fin2_2 = st.columns(4)
-
-    col_fin2_1[0].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Base</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Base"))}</p></div>', unsafe_allow_html=True)
-    col_fin2_1[1].markdown(f'<div class="metric-card"><p class="metric-title">Orçamento Reajustado</p><p class="metric-value">{format_money(get_value_fin2("Orçamento Reajustado"))}</p></div>', unsafe_allow_html=True)
-    col_fin2_1[2].markdown(f'<div class="metric-card"><p class="metric-title">Custo Final</p><p class="metric-value">{format_money(get_value_fin2("Custo Final"))}</p></div>', unsafe_allow_html=True)
-
-    col_fin2_2[0].markdown(f'<div class="metric-card"><p class="metric-title">Desvio</p><p class="metric-value">{format_money(get_value_fin2("Desvio"))}</p></div>', unsafe_allow_html=True)
-    col_fin2_2[1].markdown(f'<div class="metric-card"><p class="metric-title">Desembolso</p><p class="metric-value">{format_money(get_value_fin2("Desembolso"))}</p></div>', unsafe_allow_html=True)
-    col_fin2_2[2].markdown(f'<div class="metric-card"><p class="metric-title">Saldo</p><p class="metric-value">{format_money(get_value_fin2("Saldo"))}</p></div>', unsafe_allow_html=True)
-    col_fin2_2[3].markdown(f'<div class="metric-card"><p class="metric-title">Índice Econômico</p><p class="metric-value">{get_value_fin2("Índice Econômico")}</p></div>', unsafe_allow_html=True)
-
-
-
-# -------------------- Barra de progresso (Avanço Físico) --------------------
-st.markdown('<p class="sub-header">📅 Avanço Físico</p>', unsafe_allow_html=True)
-
-av_real_num = get_value("Avanço Físico Real", 0)
-av_plan_num = get_value("Avanço Físico Planejado", 0)
-aderencia_num = get_value("Aderência Física", 0)
-
-st.markdown(f"""
-<div class="progress-wrapper">
-    <div class="progress-bar" style="width: {av_real_num*100:.0f}%; background: #3B82F6;">
-        Real: {format_percent(av_real_num)}
-    </div>
-</div>
-<p style="color:#EF4444;font-weight:600;">Planejado: {format_percent(av_plan_num)}</p>
-<p style="color:#10B981;font-weight:600;">Aderência: {format_percent(aderencia_num)}</p>
-""", unsafe_allow_html=True)
-
-# -------------------- Linha do Tempo --------------------
-st.markdown('<p class="sub-header">⏰ Linha do Tempo</p>', unsafe_allow_html=True)
-
-# Dicionário para meses em português
-meses_pt = {
-    1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr",
-    5: "Mai", 6: "Jun", 7: "Jul", 8: "Ago",
-    9: "Set", 10: "Out", 11: "Nov", 12: "Dez"
-}
-
-# Função para formatar apenas mês/ano em português
-def format_month_year_pt(date_val):
-    try:
-        dt = pd.to_datetime(date_val)
-        return f"{meses_pt[dt.month]}/{dt.year}"  # Ex: Jun/2025 → Jun/2025
-    except:
-        return None
-
-# Pegar datas
-inicio = get_value("Início", None)
-tend = get_value("Tendência", None)
-prazo_concl = get_value("Prazo Conclusão", None)
-prazo_cliente = get_value("Prazo Cliente", None)
-
-# Criar cards para cada data
-cards = [
-    {"label": "Início", "date": format_month_year_pt(inicio), "color": "#3B82F6", "raw": inicio},
-    {"label": "Tendência", "date": format_month_year_pt(tend), "color": "#F59E0B", "raw": tend},
-    {"label": "Prazo Conclusão", "date": format_month_year_pt(prazo_concl), "color": "#10B981", "raw": prazo_concl},
-    {"label": "Prazo Cliente", "date": format_month_year_pt(prazo_cliente), "color": "#EF4444", "raw": prazo_cliente}
-]
-
-# Mostrar cards coloridos
-cols = st.columns(len(cards))
-for col, card in zip(cols, cards):
-    col.markdown(f"""
-        <div style="background-color:{card['color']}; padding: 15px; border-radius: 10px; text-align:center; color:white;">
-            <p style="margin:0; font-weight:bold;">{card['label']}</p>
-            <p style="margin:0;">{card['date'] if card['date'] else 'N/A'}</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-# -------------------- Linha Temporal --------------------
-valid_cards = [c for c in cards if c['raw'] is not None]
-if len(valid_cards) >= 2:
-    dates = [pd.to_datetime(c['raw']) for c in valid_cards]
-    labels = [c['label'] for c in valid_cards]
-    colors = [c['color'] for c in valid_cards]
-
-    fig_timeline = go.Figure()
-    # Linha base
-    fig_timeline.add_trace(go.Scatter(
-        x=[min(dates), max(dates)],
-        y=[0, 0],
-        mode='lines',
-        line=dict(color='gray', width=3),
-        showlegend=False
+st.subheader("Prazo — Curva S + Progresso")
+if df_prazo.empty:
+    st.info("Bloco de Prazo não encontrado ou sem dados.")
+else:
+    # Curva S (Planejado Acum x Real Acum)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_prazo["MÊS"], y=df_prazo["PLANEJADO ACUM. (%)"],
+        mode="lines+markers", name="Planejado Acum"
     ))
 
-    # Pontos
-    for date, label, color in zip(dates, labels, colors):
-        fig_timeline.add_trace(go.Scatter(
-            x=[date],
-            y=[0],
-            mode='markers+text',
-            marker=dict(size=15, color=color),
-            text=[label],
-            textposition='top center',
-            name=label,
-            textfont=dict(color='white', size=12)
+    if "REAL ACUM. (%)" in df_prazo.columns:
+        fig.add_trace(go.Scatter(
+            x=df_prazo["MÊS"], y=df_prazo["REAL ACUM. (%)"],
+            mode="lines+markers", name="Real Acum"
         ))
 
-    fig_timeline.update_layout(
-        title='Cronograma da Obra',
-        showlegend=False,
-        height=200,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=False, zeroline=False, title=''),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        font=dict(color='white')
-    )
-    st.plotly_chart(fig_timeline, use_container_width=True)
-else:
-    st.info("Não há datas suficientes para criar a linha do tempo.")
+    if "COMPROMETIDO ACUM. (%)" in df_prazo.columns:
+        fig.add_trace(go.Scatter(
+            x=df_prazo["MÊS"], y=df_prazo["COMPROMETIDO ACUM. (%)"],
+            mode="lines+markers", name="Comprometido Acum"
+        ))
 
-# -------------------- Status do Andamento da Obra --------------------
-st.markdown('<p class="sub-header">📝 Status Andamento da Obra</p>', unsafe_allow_html=True)
+    fig.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10))
+    st.plotly_chart(fig, use_container_width=True)
 
-status_rows = df_clean[df_clean['Metrica'].str.strip() == "Status Andamento Obra"]
+    # Progresso (último mês preenchido)
+    last = df_prazo.dropna(subset=["PLANEJADO ACUM. (%)"]).tail(1)
+    planned = float(last["PLANEJADO ACUM. (%)"].iloc[0]) if not last.empty else None
 
-if not status_rows.empty:
-    status_list = status_rows['Valor'].tolist()
-    with st.expander("📌 Ver Status Completo", expanded=False):
-        for i, status in enumerate(status_list, 1):
-            st.markdown(f"**{i}.** {status}")
-else:
-    st.info("Nenhum status de andamento disponível para esta obra.")
+    real = None
+    if "REAL ACUM. (%)" in df_prazo.columns:
+        real = float(df_prazo["REAL ACUM. (%)"].dropna().tail(1).iloc[0]) if df_prazo["REAL ACUM. (%)"].notna().any() else None
 
+    pcol1, pcol2, pcol3 = st.columns([1, 1, 1])
+    with pcol1:
+        st.write(f"**Deveria estar (Planejado):** {fmt_pct(planned, scale_0_1=True)}")
+        st.progress(0 if planned is None else max(0, min(1, planned)))
+    with pcol2:
+        st.write(f"**Estou (Real):** {fmt_pct(real, scale_0_1=True)}")
+        st.progress(0 if real is None else max(0, min(1, real)))
+    with pcol3:
+        gap = None if (planned is None or real is None) else (real - planned)
+        st.write(f"**Gap:** {fmt_pct(gap, scale_0_1=True)}")
+
+st.divider()
+
+# -------------------------
+# ACRÉSCIMOS / ECONOMIAS — Top 5/10/Todas
+# -------------------------
+t1, t2 = st.columns(2)
+
+def cut_top(df: pd.DataFrame, n: int | None, ascending=False):
+    if df.empty:
+        return df
+    df2 = df.copy()
+    if "VARIAÇÃO" in df2.columns:
+        df2 = df2.sort_values("VARIAÇÃO", ascending=ascending)
+    if n is None:
+        return df2
+    return df2.head(n)
+
+with t1:
+    st.subheader("ACRÉSCIMOS")
+    if df_acres.empty:
+        st.info("Tabela de Acréscimos não encontrada.")
+    else:
+        show = cut_top(df_acres, top_n, ascending=False)  # maiores primeiro
+        st.dataframe(show, use_container_width=True, hide_index=True)
+
+with t2:
+    st.subheader("ECONOMIAS")
+    if df_econ.empty:
+        st.info("Tabela de Economias não encontrada.")
+    else:
+        show = cut_top(df_econ, top_n, ascending=True)  # mais negativo primeiro
+        st.dataframe(show, use_container_width=True, hide_index=True)
