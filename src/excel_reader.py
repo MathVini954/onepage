@@ -125,42 +125,62 @@ def _find_header_row(ws: Worksheet, must_contain_any: list[str], max_scan: int =
 
 
 def read_indice(ws: Worksheet) -> pd.DataFrame:
-    header_row = _find_header_row(ws, ["MÊS", "ÍNDICE PROJETADO"], max_scan=300)
+    """
+    Encontra a tabela 'MÊS' x 'ÍNDICE PROJETADO' em qualquer posição da aba,
+    mesmo se estiver à direita ou com células mescladas.
+    """
+    # 1) achar a linha de header procurando a célula "ÍNDICE PROJETADO"
+    header_row = None
+    col_idx = None
+
+    max_r = min(ws.max_row or 1, 300)
+    max_c = min(ws.max_column or 1, 120)
+
+    for r in range(1, max_r + 1):
+        for c in range(1, max_c + 1):
+            v = _norm(ws.cell(r, c).value)
+            if "INDICE" in v and "PROJETADO" in v:
+                header_row = r
+                col_idx = c
+                break
+        if header_row is not None:
+            break
+
     if header_row is None:
         return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
 
-    # 🔥 antes estava limitado (10 col). Agora varre bem mais
-    cols = _map_cols(ws, header_row, max_col=60)
+    # 2) na mesma linha do header, achar a coluna do "MÊS"
+    col_mes = None
+    for c in range(1, max_c + 1):
+        v = _norm(ws.cell(header_row, c).value)
+        if v == "MES" or v.endswith(" MES") or v.startswith("MES "):
+            col_mes = c
+            break
 
-    c_mes = _find_col(cols, "MÊS")
-    c_idx = _find_col(cols, "íNDICE", "PROJETADO")
+    # fallback comum: mês está imediatamente à esquerda do índice
+    if col_mes is None and col_idx is not None and col_idx > 1:
+        col_mes = col_idx - 1
 
-    # fallback (caso o merge atrapalhe o header)
-    if c_mes is None:
-        c_mes = 1
-    if c_idx is None:
-        # tenta achar qualquer header que contenha "INDICE"
-        c_idx = _find_col(cols, "INDICE") or 2
+    if col_mes is None or col_idx is None:
+        return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
 
+    # 3) ler linhas abaixo até acabar o mês
     rows = []
-    blank_mes_run = 0
-
+    blank_run = 0
     for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
-        mes = ws.cell(r, c_mes).value
-        idx = ws.cell(r, c_idx).value
+        mes = ws.cell(r, col_mes).value
+        idx = ws.cell(r, col_idx).value
 
-        # para quando acabar a lista de meses
         if _is_blank(mes):
-            blank_mes_run += 1
-            if blank_mes_run >= 4:
+            blank_run += 1
+            if blank_run >= 4:
                 break
             continue
-        blank_mes_run = 0
+        blank_run = 0
 
         m = _to_month(mes)
         v = _to_float(idx)
 
-        # mantém mês, mas só guarda linha se índice existir
         if m is None or v is None:
             continue
 
@@ -170,6 +190,7 @@ def read_indice(ws: Worksheet) -> pd.DataFrame:
     if not df.empty:
         df = df.sort_values("MÊS")
     return df
+
 
 
 def _map_cols(ws: Worksheet, header_row: int, max_col: int = 20) -> dict[str, int]:
