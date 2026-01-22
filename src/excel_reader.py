@@ -106,6 +106,23 @@ def _to_month(x: Any) -> pd.Timestamp | None:
     except Exception:
         return None
 
+def _find_header_row(ws: Worksheet, must_contain_any: list[str], max_scan: int = 500, scan_cols: int = 60) -> int | None:
+    """
+    Procura uma linha onde TODOS os tokens em must_contain_any aparecem.
+    scan_cols define quantas colunas da linha serão varridas (pra pegar blocos à direita).
+    """
+    max_r = min(ws.max_row or 1, max_scan)
+    for r in range(1, max_r + 1):
+        row_txt = " | ".join(_norm(ws.cell(r, c).value) for c in range(1, scan_cols + 1))
+        ok = True
+        for token in must_contain_any:
+            if _norm(token) not in row_txt:
+                ok = False
+                break
+        if ok:
+            return r
+    return None
+
 
 def read_indice(ws: Worksheet) -> pd.DataFrame:
     header_row = _find_header_row(ws, ["MES", "INDICE PROJETADO"], max_scan=300)
