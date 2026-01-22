@@ -1,360 +1,494 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-import pandas as pd
+import re
+import unicodedata
+
 import openpyxl
+import pandas as pd
+from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.utils.datetime import from_excel
 
-from .utils import norm, is_blank, to_month, to_float
+
+# ============================================================
+# Normalização / parsing
+# ============================================================
+_PT_MONTH = {
+    "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
+    "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12,
+}
 
 
-# ------------------------------------------------------------
+def _strip_accents(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(ch for ch in s if not unicodedata.combining(ch))
+
+
+def _norm(x: Any) -> str:
+    if x is None:
+        return ""
+    s = str(x).strip().replace("\u00a0", " ")
+    s = " ".join(s.split())
+    s = _strip_accents(s).upper()
+    return s
+
+
+def _is_blank(x: Any) -> bool:
+    if x is None:
+        return True
+    if isinstance(x, str) and not x.strip():
+        return True
+    return False
+
+
+def _to_float(x: Any) -> float | None:
+    if x is None:
+        return None
+    try:
+        return float(x)
+    except Exception:
+        s = str(x).strip()
+        if not s:
+            return None
+
+        # remove "R$" etc
+        s = s.replace("R$", "").replace(" ", "")
+
+        # caso "1,0055" (vírgula decimal, sem milhar)
+        if "," in s and "." not in s:
+            try:
+                return float(s.replace(",", "."))
+            except Exception:
+                return None
+
+        # caso padrão BR "1.234.567,89"
+        try:
+            s2 = s.replace(".", "").replace(",", ".")
+            return float(s2)
+        except Exception:
+            return None
+
+
+def _to_month(x: Any) -> pd.Timestamp | None:
+    """
+    Converte:
+      - datetime/date
+      - serial do Excel (ex: 45292)
+      - strings: 'jan/2026', 'fev/2026', 'Jan.26', 'JAN/26', '01/01/2026'
+    Retorna Timestamp (1º dia do mês) ou None.
+    """
+    try:
+        if x is None:
+            return None
+
+        # datetime/date do Excel
+        if hasattr(x, "year") and hasattr(x, "month"):
+            dt = pd.Timestamp(x)
+            if pd.isna(dt):
+                return None
+            return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+
+        # serial do Excel (número)
+        if isinstance(x, (int, float)):
+            if x <= 0:
+                return None
+            dt = from_excel(x)
+            dt = pd.Timestamp(dt)
+            return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+
+        # string
+        if isinstance(x, str):
+            s = x.strip()
+            if not s:
+                return None
+
+            up = _norm(s)
+
+            # "JAN/2026" "FEV/26" "JAN.26" "SET-2025"
+            m = re.match(r"^([A-Z]{3})[./\- ]*(\d{2,4})$", up)
+            if m:
+                mon = _PT_MONTH.get(m.group(1))
+                yy = int(m.group(2))
+                if mon:
+                    year = yy if yy >= 100 else (2000 + yy)
+                    return pd.Timestamp(year=year, month=mon, day=1)
+
+            # tenta parse padrão
+            dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
+            if pd.notna(dt):
+                dt = pd.Timestamp(dt)
+                return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+
+            return None
+
+        # fallback geral
+        dt = pd.to_datetime(x, errors="coerce")
+        if pd.notna(dt):
+            dt = pd.Timestamp(dt)
+            return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+
+        return None
+    except Exception:
+        return None
+
+
+# ============================================================
 # Workbook helpers
-# ------------------------------------------------------------
-def load_wb(path: Path):
-    # keep_vba=True keeps XLSM macros intact
-    return openpyxl.load_workbook(path, keep_vba=True, data_only=True)
+# ============================================================
+def load_wb(path: str | Path):
+    path = Path(path)
+    keep = path.suffix.lower() == ".xlsm"
+    return openpyxl.load_workbook(path, data_only=True, keep_vba=keep)
 
 
-def sheetnames(wb) -> List[str]:
-    """Return obra tabs only (exclude auxiliary sheets)."""
-    skip = {"ORÇAMENTO_RESUMO", "ORCAMENTO_RESUMO"}
-    out = []
-    for n in wb.sheetnames:
-        if norm(n) in {norm(x) for x in skip}:
+def sheetnames(wb) -> list[str]:
+    out: list[str] = []
+    for name in wb.sheetnames:
+        n = _norm(name)
+        if n in {"LEIA-ME", "LEIA ME", "README"}:
             continue
-        out.append(n)
+        if n.startswith("_"):
+            continue
+        out.append(name)
     return out
 
 
-# ------------------------------------------------------------
-# Internal search utilities
-# ------------------------------------------------------------
-def _iter_used_cells(ws, max_row: int = 800, max_col: int = 40):
-    for r in range(1, min(ws.max_row, max_row) + 1):
-        for c in range(1, min(ws.max_column, max_col) + 1):
-            yield r, c, ws.cell(row=r, column=c).value
-
-
-def _cell_matches_required(cell_nv: str, req_nv: str) -> bool:
-    """
-    Header matching rules:
-      - For MES/OBRA: MUST be exact (avoid matching 'MÊS A MÊS')
-      - For others: allow exact or 'contains' (to accept '(R$)' etc)
-    """
-    if not cell_nv:
-        return False
-    if req_nv in ("MES", "OBRA"):
-        return cell_nv == req_nv
-    return cell_nv == req_nv or req_nv in cell_nv
-
-
-def _find_header_row(ws, required_headers: List[str], max_scan: int = 600) -> Tuple[int, Dict[str, int]]:
-    """
-    Find a row where all required headers exist in the SAME row (robust).
-    Returns (header_row, mapping req_norm->column_index).
-    """
-    req = [norm(h) for h in required_headers]
-
-    for r in range(1, min(ws.max_row, max_scan) + 1):
-        cells = []
-        for c in range(1, min(ws.max_column, 80) + 1):
-            nv = norm(ws.cell(row=r, column=c).value)
-            if nv:
-                cells.append((c, nv))
-
-        if not cells:
+# ============================================================
+# Leitores
+# ============================================================
+def read_resumo_financeiro(ws: Worksheet) -> dict[str, float | None]:
+    wanted = {
+        "ORÇAMENTO INICIAL (R$)",
+        "ORÇAMENTO REAJUSTADO (R$)",
+        "DESEMBOLSO ACUMULADO (R$)",
+        "A PAGAR (R$)",
+        "SALDO A INCORRER (R$)",
+        "CUSTO FINAL (R$)",
+        "VARIAÇÃO (R$)",
+    }
+    out: dict[str, float | None] = {}
+    for r in range(1, min(ws.max_row or 1, 120) + 1):
+        label = ws.cell(r, 1).value
+        if not isinstance(label, str):
             continue
-
-        mapping: Dict[str, int] = {}
-        used_cols: set[int] = set()
-        ok = True
-
-        for h in req:
-            candidates = [c for c, nv in cells if _cell_matches_required(nv, h)]
-            if not candidates:
-                ok = False
-                break
-            # prefer a column not used yet (avoid mapping 2 headers to same cell)
-            pick = next((c for c in candidates if c not in used_cols), candidates[0])
-            mapping[h] = pick
-            used_cols.add(pick)
-
-        if ok:
-            return r, mapping
-
-    raise ValueError(f"Header não encontrado: {required_headers}")
+        lab = str(label).strip()
+        if lab in wanted:
+            out[lab] = _to_float(ws.cell(r, 2).value)
+    return out
 
 
-def _read_table(ws, header_row: int, col_map: Dict[str, int], max_rows: int = 600) -> pd.DataFrame:
-    """Read rows after header_row until a stop condition (5 consecutive blank rows)."""
-    inv = sorted(((col, h) for h, col in col_map.items()), key=lambda x: x[0])
-    cols = [h for _, h in inv]
+def read_indice(ws: Worksheet) -> pd.DataFrame:
+    """
+    Procura a linha de header que contém MÊS e ÍNDICE PROJETADO (ignorando título mesclado).
+    """
+    max_r = min(ws.max_row or 1, 400)
+    max_c = min(ws.max_column or 1, 160)
+
+    header_row = None
+    col_mes = None
+    col_idx = None
+
+    for r in range(1, max_r + 1):
+        c_mes_tmp = None
+        c_idx_tmp = None
+        for c in range(1, max_c + 1):
+            v = _norm(ws.cell(r, c).value)
+            if v == "MES":
+                c_mes_tmp = c
+            if ("INDICE" in v) and ("PROJETADO" in v):
+                c_idx_tmp = c
+        if c_mes_tmp is not None and c_idx_tmp is not None:
+            header_row = r
+            col_mes = c_mes_tmp
+            col_idx = c_idx_tmp
+            break
+
+    if header_row is None or col_mes is None or col_idx is None:
+        return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
 
     rows = []
-    blanks = 0
-    for r in range(header_row + 1, min(ws.max_row, header_row + max_rows) + 1):
-        row = {}
-        row_has_any = False
-        for h in cols:
-            c = col_map[h]
-            v = ws.cell(row=r, column=c).value
-            if not is_blank(v):
-                row_has_any = True
-            row[h] = v
+    blank_mes_run = 0
 
-        if not row_has_any:
-            blanks += 1
-            if blanks >= 5:
+    for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
+        mes = ws.cell(r, col_mes).value
+        idx = ws.cell(r, col_idx).value
+
+        # para quando o mês acabar (permite adicionar mais linhas no fim)
+        if _is_blank(mes):
+            blank_mes_run += 1
+            if blank_mes_run >= 4:
                 break
             continue
+        blank_mes_run = 0
 
-        blanks = 0
-        rows.append(row)
+        m = _to_month(mes)
+        v = _to_float(idx)
 
-    return pd.DataFrame(rows)
-
-
-def _find_block_title(ws, title_contains: str, max_scan: int = 900) -> Tuple[int, int] | None:
-    target = norm(title_contains)
-    for r, c, v in _iter_used_cells(ws, max_row=max_scan, max_col=40):
-        if target in norm(v):
-            return r, c
-    return None
-
-
-# ------------------------------------------------------------
-# Readers
-# ------------------------------------------------------------
-def read_resumo_financeiro(ws) -> Dict[str, float]:
-    keys = [
-        "ORÇAMENTO INICIAL",
-        "ORÇAMENTO REAJUSTADO",
-        "DESEMBOLSO ACUMULADO",
-        "A PAGAR",
-        "SALDO A INCORRER",
-        "CUSTO FINAL",
-        "VARIAÇÃO",
-    ]
-    out: Dict[str, float] = {}
-    for r in range(1, min(ws.max_row, 250) + 1):
-        label = ws.cell(row=r, column=1).value
-        nl = norm(label)
-        if not nl:
+        # ignora vazios/zeros (evita “pontos fantasmas” e escala errada)
+        if m is None or v is None or float(v) == 0.0:
             continue
-        for k in keys:
-            if norm(k) in nl:
-                out[f"{k} (R$)"] = to_float(ws.cell(row=r, column=2).value)
-    return out
 
+        rows.append((m, v))
 
-def read_indice(ws) -> pd.DataFrame:
-    header_row, cols = _find_header_row(ws, ["MÊS", "ÍNDICE PROJETADO"], max_scan=800)
-    df = _read_table(ws, header_row, cols, max_rows=800)
-
-    # rename
-    rename = {}
-    for k in df.columns:
-        nk = norm(k)
-        if nk == "MES":
-            rename[k] = "MÊS"
-        elif "INDICE PROJETADO" in nk:
-            rename[k] = "ÍNDICE PROJETADO"
-    df = df.rename(columns=rename)
-
-    if "MÊS" not in df.columns or "ÍNDICE PROJETADO" not in df.columns:
-        return pd.DataFrame()
-
-    df["MÊS"] = df["MÊS"].apply(to_month)
-    df["ÍNDICE PROJETADO"] = df["ÍNDICE PROJETADO"].apply(to_float)
-    df = df.dropna(subset=["MÊS", "ÍNDICE PROJETADO"]).sort_values("MÊS")
+    df = pd.DataFrame(rows, columns=["MÊS", "ÍNDICE PROJETADO"])
+    if not df.empty:
+        df = df.sort_values("MÊS")
     return df
 
 
-def read_financeiro(ws) -> pd.DataFrame:
-    header_row, cols = _find_header_row(ws, ["MÊS", "DESEMBOLSO", "MEDIDO"], max_scan=1200)
-    df = _read_table(ws, header_row, cols, max_rows=1200)
+def read_financeiro(ws: Worksheet) -> pd.DataFrame:
+    """
+    Procura header: 'DESEMBOLSO DO MÊS' e 'MEDIDO NO MÊS' e lê a tabela.
+    """
+    max_r = min(ws.max_row or 1, 600)
+    max_c = min(ws.max_column or 1, 160)
 
-    rename = {}
-    for k in df.columns:
-        nk = norm(k)
-        if nk == "MES":
-            rename[k] = "MÊS"
-        elif "DESEMBOLSO" in nk:
-            rename[k] = "DESEMBOLSO DO MÊS (R$)"
-        elif "MEDIDO" in nk:
-            rename[k] = "MEDIDO NO MÊS (R$)"
-    df = df.rename(columns=rename)
+    header_row = None
+    col_mes = col_des = col_med = None
 
-    if "MÊS" not in df.columns:
-        return pd.DataFrame()
+    for r in range(1, max_r + 1):
+        found_des = found_med = False
+        for c in range(1, max_c + 1):
+            v = _norm(ws.cell(r, c).value)
+            if "DESEMBOLSO" in v and "MES" in v:
+                found_des = True
+                col_des = c
+            if "MEDIDO" in v and "MES" in v:
+                found_med = True
+                col_med = c
+            if v == "MES":
+                col_mes = c
+        if found_des and found_med and col_mes is not None:
+            header_row = r
+            break
 
-    df["MÊS"] = df["MÊS"].apply(to_month)
-    if "DESEMBOLSO DO MÊS (R$)" in df.columns:
-        df["DESEMBOLSO DO MÊS (R$)"] = df["DESEMBOLSO DO MÊS (R$)"].apply(to_float)
-    if "MEDIDO NO MÊS (R$)" in df.columns:
-        df["MEDIDO NO MÊS (R$)"] = df["MEDIDO NO MÊS (R$)"].apply(to_float)
+    if header_row is None or col_mes is None or col_des is None or col_med is None:
+        return pd.DataFrame(columns=["MÊS", "DESEMBOLSO DO MÊS (R$)", "MEDIDO NO MÊS (R$)"])
 
-    df = df.dropna(subset=["MÊS"]).sort_values("MÊS")
-    return df
+    rows = []
+    blank_mes_run = 0
+    for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
+        mes = ws.cell(r, col_mes).value
+        des = ws.cell(r, col_des).value
+        med = ws.cell(r, col_med).value
 
-
-def read_prazo(ws) -> pd.DataFrame:
-    header_row, _ = _find_header_row(ws, ["MÊS", "PLANEJADO MÊS", "REALIZADO"], max_scan=1600)
-
-    interesting: Dict[str, int] = {}
-    for c in range(1, min(ws.max_column, 80) + 1):
-        v = ws.cell(row=header_row, column=c).value
-        nv = norm(v)
-        if not nv:
-            continue
-        if nv == "MES":
-            interesting["MÊS"] = c
-        if "PLANEJADO" in nv and "ACUM" in nv:
-            interesting["PLANEJADO ACUM. (%)"] = c
-        if "PLANEJADO" in nv and "MES" in nv:
-            interesting["PLANEJADO MÊS (%)"] = c
-        if "PREVISTO" in nv and "MENSAL" in nv:
-            interesting["PREVISTO MENSAL (%)"] = c
-        if "REALIZADO" in nv and "MES" in nv:
-            interesting["REALIZADO Mês (%)"] = c
-
-    col_map = {norm(k): v for k, v in interesting.items()}
-    df = _read_table(ws, header_row, col_map, max_rows=1600)
-    rename = {norm(k): k for k in interesting.keys()}
-    df = df.rename(columns=rename)
-
-    if "MÊS" not in df.columns:
-        return pd.DataFrame()
-
-    df["MÊS"] = df["MÊS"].apply(to_month)
-    df = df.dropna(subset=["MÊS"]).sort_values("MÊS")
-
-    for c in [c for c in df.columns if c != "MÊS"]:
-        df[c] = df[c].apply(to_float)
-    return df
-
-
-def read_acrescimos_economias(ws) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    def read_one(title: str) -> pd.DataFrame:
-        pos = _find_block_title(ws, title)
-        if not pos:
-            return pd.DataFrame()
-        tr, _ = pos
-
-        # find header row (DESCRIÇÃO) below title
-        header_row = None
-        for r in range(tr, tr + 20):
-            for c in range(1, min(ws.max_column, 80) + 1):
-                if "DESCRICAO" in norm(ws.cell(row=r, column=c).value):
-                    header_row = r
-                    break
-            if header_row:
+        if _is_blank(mes):
+            blank_mes_run += 1
+            if blank_mes_run >= 4:
                 break
-        if not header_row:
-            return pd.DataFrame()
+            continue
+        blank_mes_run = 0
 
-        col_map: Dict[str, int] = {}
-        for c in range(1, min(ws.max_column, 80) + 1):
-            hv = ws.cell(row=header_row, column=c).value
-            nh = norm(hv)
-            if not nh:
-                continue
-            if "DESCRICAO" in nh:
-                col_map["DESCRIÇÃO"] = c
-            elif "ORCAMENTO" in nh and "INICIAL" in nh:
-                col_map["ORÇAMENTO INICIAL"] = c
-            elif "ORCAMENTO" in nh and ("REAJUST" in nh or "REAJUSTADO" in nh):
-                col_map["ORÇAMENTO REAJUSTADO"] = c
-            elif "CUSTO" in nh and "FINAL" in nh:
-                col_map["CUSTO FINAL"] = c
-            elif "VARIAC" in nh:
-                col_map["VARIAÇÃO"] = c
-            elif "JUSTIFICAT" in nh:
-                col_map["JUSTIFICATIVAS"] = c
+        m = _to_month(mes)
+        if m is None:
+            continue
 
-        if "DESCRIÇÃO" not in col_map or "VARIAÇÃO" not in col_map:
-            return pd.DataFrame()
+        rows.append((m, _to_float(des), _to_float(med)))
 
+    df = pd.DataFrame(rows, columns=["MÊS", "DESEMBOLSO DO MÊS (R$)", "MEDIDO NO MÊS (R$)"])
+    if not df.empty:
+        df = df.sort_values("MÊS")
+    return df
+
+
+def read_prazo(ws: Worksheet) -> pd.DataFrame:
+    """
+    Procura header do prazo por termos:
+      MES, PLANEJADO, REALIZADO e PREVISTO
+    """
+    max_r = min(ws.max_row or 1, 900)
+    max_c = min(ws.max_column or 1, 160)
+
+    header_row = None
+    c_mes = c_pa = c_pm = c_rm = c_prev = None
+
+    for r in range(1, max_r + 1):
+        row_vals = {c: _norm(ws.cell(r, c).value) for c in range(1, max_c + 1)}
+        # acha colunas por header
+        for c, v in row_vals.items():
+            if v == "MES":
+                c_mes = c
+            if "PLANEJADO" in v and "ACUM" in v:
+                c_pa = c
+            if "PLANEJADO" in v and "MES" in v:
+                c_pm = c
+            if "REALIZADO" in v:
+                c_rm = c
+            if "PREVISTO" in v and "MENSAL" in v:
+                c_prev = c
+
+        if c_mes and c_pm and c_rm:
+            # previsto é opcional (mas tentamos)
+            header_row = r
+            break
+
+    if header_row is None or c_mes is None:
+        return pd.DataFrame(
+            columns=["MÊS", "PLANEJADO ACUM. (%)", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", "PREVISTO MENSAL (%)"]
+        )
+
+    rows = []
+    blank_mes_run = 0
+    for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
+        mes = ws.cell(r, c_mes).value
+        if _is_blank(mes):
+            blank_mes_run += 1
+            if blank_mes_run >= 6:
+                break
+            continue
+        blank_mes_run = 0
+
+        m = _to_month(mes)
+        if m is None:
+            continue
+
+        pa = ws.cell(r, c_pa).value if c_pa else None
+        pm = ws.cell(r, c_pm).value if c_pm else None
+        rm = ws.cell(r, c_rm).value if c_rm else None
+        pv = ws.cell(r, c_prev).value if c_prev else None
+
+        rows.append((m, _to_float(pa), _to_float(pm), _to_float(rm), _to_float(pv)))
+
+    df = pd.DataFrame(
+        rows,
+        columns=["MÊS", "PLANEJADO ACUM. (%)", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", "PREVISTO MENSAL (%)"],
+    )
+    if not df.empty:
+        df = df.sort_values("MÊS")
+    return df
+
+
+def read_acrescimos_economias(ws: Worksheet) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Acha uma linha que tenha 2x 'DESCRIÇÃO' (uma pra acréscimos e outra pra economias).
+    Lê 6 colunas por lado:
+      DESCRIÇÃO, ORÇAMENTO INICIAL, ORÇAMENTO REAJUSTADO, CUSTO FINAL, VARIAÇÃO, JUSTIFICATIVAS
+    """
+    max_r = min(ws.max_row or 1, 1500)
+    max_c = min(ws.max_column or 1, 160)
+
+    header_row = None
+    start1 = start2 = None
+
+    for r in range(1, max_r + 1):
+        desc_cols = []
+        for c in range(1, max_c + 1):
+            v = _norm(ws.cell(r, c).value)
+            if v == "DESCRICAO" or "DESCRICAO" in v:
+                desc_cols.append(c)
+        if len(desc_cols) >= 2:
+            header_row = r
+            start1, start2 = desc_cols[0], desc_cols[1]
+            break
+
+    cols = ["DESCRIÇÃO", "ORÇAMENTO INICIAL", "ORÇAMENTO REAJUSTADO", "CUSTO FINAL", "VARIAÇÃO", "JUSTIFICATIVAS"]
+    if header_row is None or start1 is None or start2 is None:
+        return pd.DataFrame(columns=cols), pd.DataFrame(columns=cols)
+
+    def read_side(start_col: int) -> pd.DataFrame:
         rows = []
-        blanks = 0
-        for r in range(header_row + 1, min(ws.max_row, header_row + 2000) + 1):
-            desc = ws.cell(row=r, column=col_map["DESCRIÇÃO"]).value
-            if is_blank(desc):
-                blanks += 1
-                if blanks >= 6:
+        blank_run = 0
+        for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
+            vals = [ws.cell(r, start_col + i).value for i in range(6)]
+            if all(_is_blank(v) for v in vals):
+                blank_run += 1
+                if blank_run >= 10:
                     break
                 continue
-            blanks = 0
-            row = {k: ws.cell(row=r, column=c).value for k, c in col_map.items()}
-            rows.append(row)
+            blank_run = 0
 
-        df = pd.DataFrame(rows)
-        for c in ["ORÇAMENTO INICIAL", "ORÇAMENTO REAJUSTADO", "CUSTO FINAL", "VARIAÇÃO"]:
-            if c in df.columns:
-                df[c] = df[c].apply(to_float)
-        if "JUSTIFICATIVAS" in df.columns:
-            df["JUSTIFICATIVAS"] = df["JUSTIFICATIVAS"].fillna("").astype(str)
-        if "DESCRIÇÃO" in df.columns:
-            df["DESCRIÇÃO"] = df["DESCRIÇÃO"].astype(str)
-        return df
+            desc = vals[0]
+            if _is_blank(desc):
+                continue
 
-    df_acres = read_one("ACRÉSCIMOS")
-    df_econ = read_one("ECONOMIAS")
+            rows.append(
+                (
+                    str(desc).strip(),
+                    _to_float(vals[1]),
+                    _to_float(vals[2]),
+                    _to_float(vals[3]),
+                    _to_float(vals[4]),
+                    "" if vals[5] is None else str(vals[5]).strip(),
+                )
+            )
+
+        return pd.DataFrame(rows, columns=cols)
+
+    
+
+    df_acres = read_side(start1)
+    df_econ = read_side(start2)
     return df_acres, df_econ
-
+    
+      import pandas as pd
 
 def read_orcamento_resumo(wb) -> pd.DataFrame:
-    name = None
-    for n in wb.sheetnames:
-        if norm(n) in ("ORCAMENTO_RESUMO", "ORÇAMENTO_RESUMO"):
-            name = n
-            break
-    if not name:
+    """
+    Lê a aba ORÇAMENTO_RESUMO.
+    Não interfere em nada do Dashboard/Justificativas (é usada só na aba Resumo Obras).
+    """
+    if "ORÇAMENTO_RESUMO" not in wb.sheetnames:
         return pd.DataFrame()
 
-    ws = wb[name]
+    ws = wb["ORÇAMENTO_RESUMO"]
+
+    # acha linha do header procurando "OBRA"
     header_row = None
-    header_col = None
-    for r in range(1, min(ws.max_row, 80) + 1):
-        for c in range(1, min(ws.max_column, 120) + 1):
-            if norm(ws.cell(row=r, column=c).value) == "OBRA":
-                header_row = r
-                header_col = c
-                break
-        if header_row:
+    for r in range(1, 80):  # varre o topo (pode aumentar se quiser)
+        row_vals = []
+        for c in range(1, 60):
+            v = ws.cell(row=r, column=c).value
+            row_vals.append(str(v).strip().upper() if v is not None else "")
+        if "OBRA" in row_vals:
+            header_row = r
             break
-    if not header_row:
+
+    if header_row is None:
         return pd.DataFrame()
 
+    # captura headers até acabar
     headers = []
-    for c in range(header_col, min(ws.max_column, 200) + 1):
+    last_col = 0
+    for c in range(1, 200):
         v = ws.cell(row=header_row, column=c).value
-        if is_blank(v):
+        if v is None or str(v).strip() == "":
+            # para quando começar a dar vazio depois de já ter cabeçalho
+            if c > 1 and last_col > 0:
+                break
             continue
-        headers.append((c, str(v).strip()))
+        headers.append(str(v).strip())
+        last_col = c
 
     if not headers:
         return pd.DataFrame()
 
-    rows = []
-    blanks = 0
-    for r in range(header_row + 1, min(ws.max_row, header_row + 8000) + 1):
-        obra = ws.cell(row=r, column=headers[0][0]).value
-        if is_blank(obra):
-            blanks += 1
-            if blanks >= 8:
+    # lê linhas até achar “vazios em sequência”
+    data = []
+    empty_streak = 0
+    for r in range(header_row + 1, header_row + 1 + 5000):
+        row = []
+        all_empty = True
+        for c in range(1, last_col + 1):
+            v = ws.cell(row=r, column=c).value
+            if v is not None and str(v).strip() != "":
+                all_empty = False
+            row.append(v)
+
+        if all_empty:
+            empty_streak += 1
+            if empty_streak >= 3:
                 break
             continue
-        blanks = 0
-        row = {h: ws.cell(row=r, column=c).value for c, h in headers}
-        rows.append(row)
+        empty_streak = 0
+        data.append(row)
 
-    df = pd.DataFrame(rows)
-    obra_col = headers[0][1]
-    for col in df.columns:
-        if col == obra_col:
-            continue
-        df[col] = df[col].apply(to_float)
+    df = pd.DataFrame(data, columns=headers)
+
+    # padroniza "OBRA" (se vier com espaços)
+    if "OBRA" in df.columns:
+        df["OBRA"] = df["OBRA"].astype(str).str.strip()
+
     return df
+
