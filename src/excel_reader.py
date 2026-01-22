@@ -107,21 +107,53 @@ def _to_month(x: Any) -> pd.Timestamp | None:
         return None
 
 
-def _find_header_row(ws: Worksheet, must_contain_any: list[str], max_scan: int = 500) -> int | None:
-    """
-    Procura uma linha onde pelo menos os termos em must_contain_any apareçam na linha.
-    """
-    max_r = min(ws.max_row or 1, max_scan)
-    for r in range(1, max_r + 1):
-        row_txt = " | ".join(_norm(ws.cell(r, c).value) for c in range(1, 15))
-        ok = True
-        for token in must_contain_any:
-            if token not in row_txt:
-                ok = False
+def read_indice(ws: Worksheet) -> pd.DataFrame:
+    header_row = _find_header_row(ws, ["MES", "INDICE PROJETADO"], max_scan=300)
+    if header_row is None:
+        return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
+
+    # 🔥 antes estava limitado (10 col). Agora varre bem mais
+    cols = _map_cols(ws, header_row, max_col=60)
+
+    c_mes = _find_col(cols, "MES")
+    c_idx = _find_col(cols, "INDICE", "PROJETADO")
+
+    # fallback (caso o merge atrapalhe o header)
+    if c_mes is None:
+        c_mes = 1
+    if c_idx is None:
+        # tenta achar qualquer header que contenha "INDICE"
+        c_idx = _find_col(cols, "INDICE") or 2
+
+    rows = []
+    blank_mes_run = 0
+
+    for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
+        mes = ws.cell(r, c_mes).value
+        idx = ws.cell(r, c_idx).value
+
+        # para quando acabar a lista de meses
+        if _is_blank(mes):
+            blank_mes_run += 1
+            if blank_mes_run >= 4:
                 break
-        if ok:
-            return r
-    return None
+            continue
+        blank_mes_run = 0
+
+        m = _to_month(mes)
+        v = _to_float(idx)
+
+        # mantém mês, mas só guarda linha se índice existir
+        if m is None or v is None:
+            continue
+
+        rows.append((m, v))
+
+    df = pd.DataFrame(rows, columns=["MÊS", "ÍNDICE PROJETADO"])
+    if not df.empty:
+        df = df.sort_values("MÊS")
+    return df
+
 
 def _map_cols(ws: Worksheet, header_row: int, max_col: int = 20) -> dict[str, int]:
     """
