@@ -1,20 +1,7 @@
 {
   "name": "Controle de Prazo e Custo",
   "short_name": "Prazo&Custo",
-  "start_url": "./index.html",
-  "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#0b1220",
-  "orientation": "portrait",
-  "icons": [
-    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
-  ]
-}
-{
-  "name": "Controle de Prazo e Custo",
-  "short_name": "Prazo&Custo",
-  "start_url": "./index.html",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0b1220",
