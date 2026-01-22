@@ -103,13 +103,13 @@ def kpi_card(label: str, value: float | None):
         f"""
         <div style="
             border: 1px solid rgba(255,255,255,0.10);
-            border-radius: 2px;
-            padding: 2px 4px;
+            border-radius: 6px;
+            padding: 6px 8px;
             background: rgba(255,255,255,0.03);
             height: 100px;
         ">
             <div style="font-size: 12px; opacity: 0.75; margin-bottom: 6px;">{label}</div>
-            <div style="font-size: 26px; font-weight: 800; line-height: 1.05;">{brl_compact(value)}</div>
+            <div style="font-size: 20px; font-weight: 800; line-height: 1.05;">{brl_compact(value)}</div>
             <div style="font-size: 12px; opacity: 0.65; margin-top: 6px;">{fmt_brl(value)}</div>
         </div>
         """,
