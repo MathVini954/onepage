@@ -52,49 +52,54 @@ def _to_float(x: Any) -> float | None:
         except Exception:
             return None
 
+from openpyxl.utils.datetime import from_excel
+
 def _to_month(x: Any) -> pd.Timestamp | None:
     """
     Converte:
       - datetime/date
-      - strings: 'Jan.26', 'JAN/26', 'jan/2026', '01/01/2026'
-    Sempre retorna Timestamp (1º dia do mês) ou None. Nunca lança erro.
+      - serial do Excel (ex: 45292)
+      - strings: 'jan/2026', 'Jan.26', 'JAN/26', '01/01/2026'
+    Retorna Timestamp (1º dia do mês) ou None.
     """
     try:
         if x is None:
             return None
 
         # datetime/date do Excel
-        if hasattr(x, "year") and hasattr(x, "month") and hasattr(x, "day"):
-            try:
-                dt = pd.Timestamp(x)
-                if pd.isna(dt):
-                    return None
-                return pd.Timestamp(year=dt.year, month=dt.month, day=1)
-            except Exception:
+        if hasattr(x, "year") and hasattr(x, "month"):
+            dt = pd.Timestamp(x)
+            if pd.isna(dt):
                 return None
+            return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+
+        # serial Excel (número)
+        if isinstance(x, (int, float)):
+            # 0, 1, etc geralmente é lixo/fórmula => ignora
+            if x <= 0:
+                return None
+            # Excel serial -> date
+            dt = from_excel(x)
+            dt = pd.Timestamp(dt)
+            return pd.Timestamp(year=dt.year, month=dt.month, day=1)
 
         # string
         if isinstance(x, str):
             s = x.strip()
             if not s:
                 return None
-            up = _norm(s)
 
-            # "JAN.26" / "JAN/26" / "JAN-2026"
-            m = re.match(r"^([A-Z]{3})[./\- ]*(\d{2,4})$", up)
-            if m:
-                mon = _PT_MONTH.get(m.group(1))
-                yy = int(m.group(2))
-                if mon:
-                    year = yy if yy >= 100 else (2000 + yy)
-                    return pd.Timestamp(year=year, month=mon, day=1)
-
-            # parse padrão
+            # tenta parse direto
             dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
             if pd.notna(dt):
                 dt = pd.Timestamp(dt)
                 return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+
+            # fallback
             return None
+
+    
+
 
         # fallback (números etc.)
         dt = pd.to_datetime(x, errors="coerce")
@@ -175,9 +180,10 @@ def read_indice(ws: Worksheet) -> pd.DataFrame:
 
         m = _to_month(mes)
         v = _to_float(idx)
-
-        if m is None or v is None:
+       if m is None or v is None or float(v) == 0.0:
             continue
+
+       
 
         rows.append((m, v))
 
