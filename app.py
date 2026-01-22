@@ -849,15 +849,15 @@ if debug:
     st.write("Arquivo:", excel_path.name)
     st.write("Obras:", obras)
     st.write("df_idx.head():", df_idx.head() if df_idx is not None else None)
-    # ============================================================
+ # ============================================================
 # TAB Resumo Obras (ORÇAMENTO_RESUMO)
 # ============================================================
-with tab_resumo:
-    st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
+    with tab_resumo:
+        st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
 
-      if df_orc_resumo is None or df_orc_resumo.empty:
-        st.info("A aba **ORÇAMENTO_RESUMO** não foi encontrada ou está vazia.")
-    else:
+             if df_orc_resumo is None or df_orc_resumo.empty:
+                   st.info("A aba **ORÇAMENTO_RESUMO** não foi encontrada ou está vazia.")
+     else:
         df_show = df_orc_resumo.copy()
 
         # garante OBRA como texto
