@@ -676,7 +676,7 @@ saldo = stats["saldo"]
 
 colA, colB, colC = st.columns([1.2, 1, 1])
 with colA:
-    label = "Economia líquida" if saldo < 0 else "Acréscimo líquido"
+    label = "Ganho Oraçmento" if saldo < 0 else "Acréscimo Orçamento"
     color = PALETTE["good"] if saldo < 0 else PALETTE["bad"]
     st.markdown(
         f"""
