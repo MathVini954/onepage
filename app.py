@@ -849,6 +849,8 @@ if debug:
     st.write("Arquivo:", excel_path.name)
     st.write("Obras:", obras)
     st.write("df_idx.head():", df_idx.head() if df_idx is not None else None)
+
+
 with tab_resumo:
     st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
 
@@ -857,37 +859,62 @@ with tab_resumo:
     else:
         df_show = df_orc_resumo.copy()
 
+        # --- helpers locais (não dependem do src.utils) ---
+        def _norm_colname(x: str) -> str:
+            import unicodedata
+            s = "" if x is None else str(x).strip()
+            s = unicodedata.normalize("NFKD", s)
+            s = "".join(ch for ch in s if not unicodedata.combining(ch))
+            return " ".join(s.upper().split())
+
+        # garante OBRA como texto
         if "OBRA" in df_show.columns:
             df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
 
-        num_cols = [c for c in df_show.columns if c != "OBRA"]
+        # colunas numéricas (tudo menos OBRA)
+        num_cols = [c for c in df_show.columns if _norm_colname(c) != "OBRA"]
         for c in num_cols:
             df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
 
+        # detectar a coluna de variação (qualquer nome que contenha VARIA)
+        variacao_col = None
+        for c in df_show.columns:
+            if "VARIA" in _norm_colname(c):
+                variacao_col = c
+                break
+
+        # formatação BRL
         fmt_map = {c: fmt_brl for c in num_cols}
 
         def style_variacao(s: pd.Series):
-            # s é a coluna VARIAÇÃO
             v = pd.to_numeric(s, errors="coerce")
-            styles = []
+            out = []
             for x in v:
                 if pd.isna(x):
-                    styles.append("")
+                    out.append("")
                 elif x > 0:
                     # pior: vermelho vibrante
-                    styles.append("background-color:#ef4444; color:white; font-weight:900;")
+                    out.append("background-color:#ef4444; color:white; font-weight:900;")
                 elif x < 0:
                     # melhor: verde vibrante
-                    styles.append("background-color:#22c55e; color:white; font-weight:900;")
+                    out.append("background-color:#22c55e; color:white; font-weight:900;")
                 else:
-                    styles.append("background-color:#94a3b8; color:white; font-weight:900;")
-            return styles
+                    out.append("background-color:#94a3b8; color:white; font-weight:900;")
+            return out
 
-        styler = df_show.style.format(fmt_map)
+        styler = df_show.style.format(fmt_map, na_rep="—")
 
-        # aplica só na coluna VARIAÇÃO (se existir)
-        if "VARIAÇÃO" in df_show.columns:
-            styler = styler.apply(style_variacao, subset=["VARIAÇÃO"])
+        # aplicar estilo na coluna de variação (se existir)
+        if variacao_col is not None:
+            styler = styler.apply(style_variacao, subset=[variacao_col])
+            # deixa a coluna mais “forte” visualmente
+            styler = styler.set_properties(
+                subset=[variacao_col],
+                **{
+                    "text-align": "right",
+                    "border-radius": "8px",
+                },
+            )
 
         st.dataframe(
             styler,
