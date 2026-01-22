@@ -3,25 +3,32 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import openpyxl
+import pandas as pd
 from openpyxl.worksheet.worksheet import Worksheet
+import unicodedata
+import re
 
 
 # ============================================================
-# Helpers (strings / blanks / parsing)
+# Normalização / parsing
 # ============================================================
 _PT_MONTH = {
     "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
     "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12,
 }
 
-def _norm(s: Any) -> str:
-    if s is None:
+def _strip_accents(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(ch for ch in s if not unicodedata.combining(ch))
+
+def _norm(x: Any) -> str:
+    if x is None:
         return ""
-    s = str(s).strip()
-    s = s.replace("\u00a0", " ")
-    return " ".join(s.split()).upper()
+    s = str(x).strip().replace("\u00a0", " ")
+    s = " ".join(s.split())
+    s = _strip_accents(s).upper()
+    return s
 
 def _is_blank(x: Any) -> bool:
     if x is None:
@@ -40,73 +47,101 @@ def _to_float(x: Any) -> float | None:
             s = str(x).strip()
             if not s:
                 return None
-            # "1.234.567,89" -> 1234567.89
             s = s.replace(".", "").replace(",", ".")
             return float(s)
         except Exception:
             return None
 
 def _to_month(x: Any) -> pd.Timestamp | None:
-    """Converte datas do Excel / strings tipo 'Jan.26' / 'jan/2026' / '01/01/2026' em Timestamp."""
-    if x is None or (isinstance(x, str) and not x.strip()):
-        return None
+    """
+    Converte:
+      - datetime/date
+      - strings: 'Jan.26', 'JAN/26', 'jan/2026', '01/01/2026'
+    Sempre retorna Timestamp (1º dia do mês) ou None. Nunca lança erro.
+    """
+    try:
+        if x is None:
+            return None
 
-    # Datas já como datetime/date
-    if hasattr(x, "year") and hasattr(x, "month") and hasattr(x, "day"):
-        try:
-            return pd.Timestamp(x).normalize()
-        except Exception:
-            pass
+        # datetime/date do Excel
+        if hasattr(x, "year") and hasattr(x, "month") and hasattr(x, "day"):
+            try:
+                dt = pd.Timestamp(x)
+                if pd.isna(dt):
+                    return None
+                return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+            except Exception:
+                return None
 
-    # Strings
-    if isinstance(x, str):
-        s = x.strip()
-        up = _norm(s)
+        # string
+        if isinstance(x, str):
+            s = x.strip()
+            if not s:
+                return None
+            up = _norm(s)
 
-        # "JAN.26", "JAN/26", "JAN-2026"
-        import re
-        m = re.match(r"^([A-ZÇ]{3})[./\- ]*(\d{2,4})$", up)
-        if m:
-            mon = _PT_MONTH.get(m.group(1), None)
-            yy = int(m.group(2))
-            if mon:
-                year = yy if yy >= 100 else (2000 + yy)
-                return pd.Timestamp(year=year, month=mon, day=1)
+            # "JAN.26" / "JAN/26" / "JAN-2026"
+            m = re.match(r"^([A-Z]{3})[./\- ]*(\d{2,4})$", up)
+            if m:
+                mon = _PT_MONTH.get(m.group(1))
+                yy = int(m.group(2))
+                if mon:
+                    year = yy if yy >= 100 else (2000 + yy)
+                    return pd.Timestamp(year=year, month=mon, day=1)
 
-        # fallback: tenta parse padrão
-        try:
+            # parse padrão
             dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
             if pd.notna(dt):
-                return pd.Timestamp(dt).normalize()
-        except Exception:
-            pass
+                dt = pd.Timestamp(dt)
+                return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+            return None
 
-    # Números (serial excel) - raro via openpyxl, mas garante
-    try:
+        # fallback (números etc.)
         dt = pd.to_datetime(x, errors="coerce")
         if pd.notna(dt):
-            return pd.Timestamp(dt).normalize()
+            dt = pd.Timestamp(dt)
+            return pd.Timestamp(year=dt.year, month=dt.month, day=1)
+
+        return None
     except Exception:
-        pass
-
-    return None
+        return None
 
 
-def _find_row_with(ws: Worksheet, must_have: list[tuple[int, str]], max_scan: int = 400) -> int | None:
+def _find_header_row(ws: Worksheet, must_contain_any: list[str], max_scan: int = 500) -> int | None:
     """
-    Procura uma linha onde cada (col, texto) está presente (match por contains).
-    col é 1-indexado.
+    Procura uma linha onde pelo menos os termos em must_contain_any apareçam na linha.
     """
     max_r = min(ws.max_row or 1, max_scan)
     for r in range(1, max_r + 1):
+        row_txt = " | ".join(_norm(ws.cell(r, c).value) for c in range(1, 15))
         ok = True
-        for col, token in must_have:
-            v = ws.cell(r, col).value
-            if token not in _norm(v):
+        for token in must_contain_any:
+            if token not in row_txt:
                 ok = False
                 break
         if ok:
             return r
+    return None
+
+def _map_cols(ws: Worksheet, header_row: int, max_col: int = 20) -> dict[str, int]:
+    """
+    Mapeia cabeçalhos (normalizados) -> coluna (1-index).
+    """
+    m: dict[str, int] = {}
+    for c in range(1, max_col + 1):
+        h = _norm(ws.cell(header_row, c).value)
+        if h:
+            m[h] = c
+    return m
+
+def _find_col(cols: dict[str, int], *keywords: str) -> int | None:
+    """
+    Retorna a primeira coluna cujo header contém TODAS as keywords.
+    """
+    ks = [_norm(k) for k in keywords]
+    for h, c in cols.items():
+        if all(k in h for k in ks):
+            return c
     return None
 
 
@@ -134,10 +169,6 @@ def sheetnames(wb) -> list[str]:
 # Leitura dos blocos
 # ============================================================
 def read_resumo_financeiro(ws: Worksheet) -> dict[str, float | None]:
-    """
-    Lê o bloco A2:B8 (labels na col A, valores na col B).
-    Retorna dict com as chaves exatamente como estão no Excel (ex: 'ORÇAMENTO INICIAL (R$)').
-    """
     wanted = {
         "ORÇAMENTO INICIAL (R$)",
         "ORÇAMENTO REAJUSTADO (R$)",
@@ -148,8 +179,7 @@ def read_resumo_financeiro(ws: Worksheet) -> dict[str, float | None]:
         "VARIAÇÃO (R$)",
     }
     out: dict[str, float | None] = {}
-    # varre um pedaço do topo (robusto se mexer em linhas)
-    for r in range(1, min(ws.max_row or 1, 80) + 1):
+    for r in range(1, min(ws.max_row or 1, 100) + 1):
         label = ws.cell(r, 1).value
         if not isinstance(label, str):
             continue
@@ -160,22 +190,23 @@ def read_resumo_financeiro(ws: Worksheet) -> dict[str, float | None]:
 
 
 def read_indice(ws: Worksheet) -> pd.DataFrame:
-    """
-    Tabela: col A = MÊS, col B = ÍNDICE PROJETADO (header típico na linha 11)
-    """
-    header_row = _find_row_with(ws, [(1, "MÊS"), (2, "ÍNDICE PROJETADO")], max_scan=200)
+    header_row = _find_header_row(ws, ["MES", "INDICE PROJETADO"], max_scan=250)
     if header_row is None:
         return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
+
+    cols = _map_cols(ws, header_row, max_col=10)
+    c_mes = _find_col(cols, "MES") or 1
+    c_idx = _find_col(cols, "INDICE", "PROJETADO") or 2
 
     rows = []
     blank_run = 0
     for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
-        mes = ws.cell(r, 1).value
-        idx = ws.cell(r, 2).value
+        mes = ws.cell(r, c_mes).value
+        idx = ws.cell(r, c_idx).value
 
         if _is_blank(mes) and _is_blank(idx):
             blank_run += 1
-            if blank_run >= 5:
+            if blank_run >= 6:
                 break
             continue
         blank_run = 0
@@ -193,74 +224,23 @@ def read_indice(ws: Worksheet) -> pd.DataFrame:
 
 
 def read_financeiro(ws: Worksheet) -> pd.DataFrame:
-    """
-    Tabela: col D = MÊS, col E = DESEMBOLSO DO MÊS (R$), col F = MEDIDO NO MÊS (R$)
-    """
-    header_row = _find_row_with(ws, [(5, "DESEMBOLSO DO MÊS"), (6, "MEDIDO NO MÊS")], max_scan=250)
+    header_row = _find_header_row(ws, ["DESEMBOLSO DO MES", "MEDIDO NO MES"], max_scan=300)
     if header_row is None:
         return pd.DataFrame(columns=["MÊS", "DESEMBOLSO DO MÊS (R$)", "MEDIDO NO MÊS (R$)"])
 
+    cols = _map_cols(ws, header_row, max_col=15)
+    c_mes = _find_col(cols, "MES") or 4
+    c_des = _find_col(cols, "DESEMBOLSO", "MES") or 5
+    c_med = _find_col(cols, "MEDIDO", "MES") or 6
+
     rows = []
     blank_run = 0
     for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
-        mes = ws.cell(r, 4).value
-        des = ws.cell(r, 5).value
-        med = ws.cell(r, 6).value
+        mes = ws.cell(r, c_mes).value
+        des = ws.cell(r, c_des).value
+        med = ws.cell(r, c_med).value
 
         if _is_blank(mes) and _is_blank(des) and _is_blank(med):
-            blank_run += 1
-            if blank_run >= 5:
-                break
-            continue
-        blank_run = 0
-
-        m = _to_month(mes)
-        vdes = _to_float(des)
-        vmed = _to_float(med)
-        if m is None:
-            continue
-
-        rows.append((m, vdes, vmed))
-
-    df = pd.DataFrame(rows, columns=["MÊS", "DESEMBOLSO DO MÊS (R$)", "MEDIDO NO MÊS (R$)"])
-    if not df.empty:
-        df = df.sort_values("MÊS")
-    return df
-
-
-def read_prazo(ws: Worksheet) -> pd.DataFrame:
-    """
-    Tabela (linha ~27):
-      A: MÊS
-      B: PLANEJADO ACUM. (%)
-      C: PLANEJADO MÊS (%)
-      D: REALIZADO Mês (%)
-      E: PREVISTO MENSAL(%)  -> padroniza para 'PREVISTO MENSAL (%)'
-    """
-    header_row = _find_row_with(
-        ws,
-        [(1, "MÊS"), (2, "PLANEJADO ACUM"), (3, "PLANEJADO MÊS"), (4, "REALIZADO")],
-        max_scan=400,
-    )
-    if header_row is None:
-        return pd.DataFrame(
-            columns=["MÊS", "PLANEJADO ACUM. (%)", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", "PREVISTO MENSAL (%)"]
-        )
-
-    # descobre qual texto está no header da coluna E e normaliza para o nome que o app usa
-    hE = _norm(ws.cell(header_row, 5).value)
-    previsto_name = "PREVISTO MENSAL (%)" if "PREVISTO" in hE else "PREVISTO MENSAL (%)"
-
-    rows = []
-    blank_run = 0
-    for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
-        mes = ws.cell(r, 1).value
-        pla_a = ws.cell(r, 2).value
-        pla_m = ws.cell(r, 3).value
-        rea_m = ws.cell(r, 4).value
-        prev_m = ws.cell(r, 5).value
-
-        if _is_blank(mes) and _is_blank(pla_a) and _is_blank(pla_m) and _is_blank(rea_m) and _is_blank(prev_m):
             blank_run += 1
             if blank_run >= 6:
                 break
@@ -270,26 +250,59 @@ def read_prazo(ws: Worksheet) -> pd.DataFrame:
         m = _to_month(mes)
         if m is None:
             continue
+        rows.append((m, _to_float(des), _to_float(med)))
 
-        rows.append(
-            (
-                m,
-                _to_float(pla_a),
-                _to_float(pla_m),
-                _to_float(rea_m),
-                _to_float(prev_m),
-            )
+    df = pd.DataFrame(rows, columns=["MÊS", "DESEMBOLSO DO MÊS (R$)", "MEDIDO NO MÊS (R$)"])
+    if not df.empty:
+        df = df.sort_values("MÊS")
+    return df
+
+
+def read_prazo(ws: Worksheet) -> pd.DataFrame:
+    """
+    Lê PRAZO independente de posição de coluna:
+    precisa ter 'MES', 'PLANEJADO ACUM', 'PLANEJADO MES', 'REALIZADO', e 'PREVISTO MENSAL(%)' (ou variações).
+    """
+    header_row = _find_header_row(ws, ["MES", "PLANEJADO", "REALIZADO"], max_scan=600)
+    if header_row is None:
+        return pd.DataFrame(
+            columns=["MÊS", "PLANEJADO ACUM. (%)", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", "PREVISTO MENSAL (%)"]
         )
+
+    cols = _map_cols(ws, header_row, max_col=20)
+
+    c_mes  = _find_col(cols, "MES") or 1
+    c_pa   = _find_col(cols, "PLANEJADO", "ACUM")  # planejado acumulado
+    c_pm   = _find_col(cols, "PLANEJADO", "MES")   # planejado mês
+    c_rm   = _find_col(cols, "REALIZADO")          # realizado mês
+    c_prev = _find_col(cols, "PREVISTO", "MENSAL") or _find_col(cols, "PREVISTO")  # previsto mensal(%) var
+
+    rows = []
+    blank_run = 0
+    for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
+        mes = ws.cell(r, c_mes).value if c_mes else None
+        pa  = ws.cell(r, c_pa).value if c_pa else None
+        pm  = ws.cell(r, c_pm).value if c_pm else None
+        rm  = ws.cell(r, c_rm).value if c_rm else None
+        pv  = ws.cell(r, c_prev).value if c_prev else None
+
+        if _is_blank(mes) and _is_blank(pa) and _is_blank(pm) and _is_blank(rm) and _is_blank(pv):
+            blank_run += 1
+            if blank_run >= 8:
+                break
+            continue
+        blank_run = 0
+
+        m = _to_month(mes)
+        if m is None:
+            continue
+
+        rows.append((m, _to_float(pa), _to_float(pm), _to_float(rm), _to_float(pv)))
 
     df = pd.DataFrame(
         rows,
-        columns=["MÊS", "PLANEJADO ACUM. (%)", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", previsto_name],
+        columns=["MÊS", "PLANEJADO ACUM. (%)", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)", "PREVISTO MENSAL (%)"],
     )
-
-    # ✅ padroniza: o app procura exatamente "PREVISTO MENSAL (%)"
-    if previsto_name != "PREVISTO MENSAL (%)" and previsto_name in df.columns:
-        df = df.rename(columns={previsto_name: "PREVISTO MENSAL (%)"})
-
     if not df.empty:
         df = df.sort_values("MÊS")
     return df
@@ -297,14 +310,12 @@ def read_prazo(ws: Worksheet) -> pd.DataFrame:
 
 def read_acrescimos_economias(ws: Worksheet) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Bloco (linha ~47):
-      Acréscimos: col A..F  (inclui JUSTIFICATIVAS na F)
-      Economias:  col G..L  (inclui JUSTIFICATIVAS na L)
-
-    Retorna: (df_acrescimos, df_economias) com colunas:
-      DESCRIÇÃO, ORÇAMENTO INICIAL, ORÇAMENTO REAJUSTADO, CUSTO FINAL, VARIAÇÃO, JUSTIFICATIVAS
+    Lê as duas listas (Acréscimos e Economias) incluindo JUSTIFICATIVAS.
+    Assume layout padrão:
+      Acréscimos: A..F (F = JUSTIFICATIVAS)
+      Economias : G..L (L = JUSTIFICATIVAS)
     """
-    header_row = _find_row_with(ws, [(1, "DESCRIÇÃO"), (6, "JUSTIFICATIVAS"), (7, "DESCRIÇÃO"), (12, "JUSTIFICATIVAS")], max_scan=800)
+    header_row = _find_header_row(ws, ["ECONOMIAS", "ACRESCIMOS"], max_scan=900)
     if header_row is None:
         cols = ["DESCRIÇÃO", "ORÇAMENTO INICIAL", "ORÇAMENTO REAJUSTADO", "CUSTO FINAL", "VARIAÇÃO", "JUSTIFICATIVAS"]
         return pd.DataFrame(columns=cols), pd.DataFrame(columns=cols)
@@ -312,7 +323,7 @@ def read_acrescimos_economias(ws: Worksheet) -> tuple[pd.DataFrame, pd.DataFrame
     def read_side(start_col: int) -> pd.DataFrame:
         rows = []
         blank_run = 0
-        for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
+        for r in range(header_row + 2, (ws.max_row or header_row + 2) + 1):
             desc = ws.cell(r, start_col + 0).value
             o_ini = ws.cell(r, start_col + 1).value
             o_rea = ws.cell(r, start_col + 2).value
@@ -322,7 +333,7 @@ def read_acrescimos_economias(ws: Worksheet) -> tuple[pd.DataFrame, pd.DataFrame
 
             if _is_blank(desc) and _is_blank(o_ini) and _is_blank(o_rea) and _is_blank(c_fin) and _is_blank(var_) and _is_blank(just):
                 blank_run += 1
-                if blank_run >= 8:
+                if blank_run >= 10:
                     break
                 continue
             blank_run = 0
@@ -341,11 +352,10 @@ def read_acrescimos_economias(ws: Worksheet) -> tuple[pd.DataFrame, pd.DataFrame
                 )
             )
 
-        df = pd.DataFrame(
+        return pd.DataFrame(
             rows,
             columns=["DESCRIÇÃO", "ORÇAMENTO INICIAL", "ORÇAMENTO REAJUSTADO", "CUSTO FINAL", "VARIAÇÃO", "JUSTIFICATIVAS"],
         )
-        return df
 
     df_acres = read_side(1)   # A..F
     df_econ  = read_side(7)   # G..L
