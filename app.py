@@ -585,17 +585,7 @@ with tab_dash:
 
     # ====== Left: gráficos + prazo
     with left:
-        # ✅ 3 cards (agora ficam antes dos gráficos de barras)
-        row3 = st.columns(3)
-        with row3[0]:
-            kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
-        with row3[1]:
-            kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
-        with row3[2]:
-            color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
-            kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
 
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
         g1, g2 = st.columns(2)
 
@@ -734,6 +724,18 @@ with tab_dash:
 
     # ====== Detalhamento completo com degradê
     st.subheader("Detalhamento — Tabelas completas (com barras em degradê)")
+
+            # ✅ 3 cards (agora ficam antes dos gráficos de barras)
+        row3 = st.columns(3)
+        with row3[0]:
+            kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
+        with row3[1]:
+            kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
+        with row3[2]:
+            color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
+            kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
+
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
 
