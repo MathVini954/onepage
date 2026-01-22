@@ -1,23 +1,48 @@
 from __future__ import annotations
 
-from pathlib import Path
-import html
-
-import pandas as pd
-import plotly.graph_objects as go
+import os
+import traceback
 import streamlit as st
 
-from src.excel_reader import (
-    load_wb,
-    sheetnames,
-    read_resumo_financeiro,
-    read_indice,
-    read_financeiro,
-    read_prazo,
-    read_acrescimos_economias,
-)
+st.set_page_config(page_title="Controle Prazo & Custo", layout="wide")
 
-from src.logos import find_logo_path
+# 🔥 SAFE MODE: deixe True até o app voltar a aparecer
+SAFE_MODE = True
+
+st.title("Controle de Prazo e Custo" + (" (SAFE MODE)" if SAFE_MODE else ""))
+
+if SAFE_MODE:
+    st.info("SAFE MODE ativo: CSS desativado e debug ligado.")
+    st.write("cwd:", os.getcwd())
+    st.write("Arquivos na raiz:", os.listdir("."))
+    if os.path.isdir("src"):
+        st.write("Arquivos em src:", os.listdir("src"))
+    if os.path.isdir("assets"):
+        st.write("Arquivos em assets:", os.listdir("assets"))
+
+# ✅ IMPORTS do seu projeto: deixe DENTRO do try (pra erro aparecer na tela)
+try:
+    import pandas as pd
+    import plotly.graph_objects as go
+
+    from src.excel_reader import (
+        load_wb,
+        sheetnames,
+        read_resumo_financeiro,
+        read_indice,
+        read_financeiro,
+        read_prazo,
+        read_acrescimos_economias,
+    )
+    from src.logos import find_logo_path
+    from src.utils import fmt_brl
+except Exception:
+    st.error("Erro ao importar módulos do projeto (src/*).")
+    st.code(traceback.format_exc())
+    st.stop()
+
+# ✅ a partir daqui, TODO seu código normal
+
 
 
 
