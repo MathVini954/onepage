@@ -102,14 +102,14 @@ def kpi_card(label: str, value: float | None):
         f"""
         <div style="
             border: 1px solid rgba(255,255,255,0.10);
-            border-radius: 10px;
-            padding: 10px 14px;
+            border-radius: 14px;
+            padding: 12px 14px;
             background: rgba(255,255,255,0.03);
-            height: 120px;
+            height: 92px;
         ">
-            <div style="font-size: 13px; opacity: 0.75; margin-bottom: 8px;">{html.escape(label)}</div>
-            <div style="font-size: 20px; font-weight: 900; line-height: 1.05;">{html.escape(brl_compact(value))}</div>
-            <div style="font-size: 12px; opacity: 0.65; margin-top: 8px;">{html.escape(fmt_brl(value))}</div>
+            <div style="font-size: 12px; opacity: 0.75; margin-bottom: 6px;">{html.escape(label)}</div>
+            <div style="font-size: 24px; font-weight: 900; line-height: 1.05;">{html.escape(brl_compact(value))}</div>
+            <div style="font-size: 11px; opacity: 0.65; margin-top: 6px;">{html.escape(fmt_brl(value))}</div>
         </div>
         """,
         unsafe_allow_html=True,
