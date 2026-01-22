@@ -268,6 +268,8 @@ def kpi_card_pct(label: str, value_ratio: float | None, sub: str = ""):
         unsafe_allow_html=True,
     )
 
+
+# ✅ NOVO: % com cor (para aderência)
 def kpi_card_pct_highlight(label: str, value_ratio: float | None, sub: str = "", value_color: str | None = None):
     col = value_color if value_color else PALETTE["text"]
     st.markdown(
@@ -280,7 +282,6 @@ def kpi_card_pct_highlight(label: str, value_ratio: float | None, sub: str = "",
 """,
         unsafe_allow_html=True,
     )
-
 
 
 def kpi_card_index(label: str, idx: float | None, month_label: str):
@@ -446,8 +447,6 @@ if not df_idx.empty and "ÍNDICE PROJETADO" in df_idx.columns:
 temp = pd.DataFrame()
 ref_month_label = "—"
 
-k_ader_acc = None
-k_ader_mes = None
 k_real_acum = None
 k_plan_acum = None
 k_prev_acum = None
@@ -455,6 +454,7 @@ k_real_m = None
 k_plan_m = None
 k_prev_m = None
 k_ader_acc = None
+k_ader_mes = None  # ✅ NOVO
 
 planned_m = []
 previsto_m = []
@@ -534,12 +534,16 @@ if not df_prazo.empty and "MÊS" in df_prazo.columns:
         k_plan_acum = temp.loc[last_real, "PLANEJADO_ACUM"]
         k_prev_acum = temp.loc[last_real, "PREVISTO_ACUM"]
 
-        if pd.notna(k_plan_acum) and float(k_plan_acum) != 0:
-            k_ader_acc = (float(k_real_acum or 0) / float(k_plan_acum)) * 100
+        # ✅ Aderência (evita pd.NA em boolean)
+        plan_a = pd.to_numeric(pd.Series([k_plan_acum]), errors="coerce").iloc[0]
+        real_a = pd.to_numeric(pd.Series([k_real_acum]), errors="coerce").iloc[0]
+        if pd.notna(plan_a) and float(plan_a) != 0:
+            k_ader_acc = (float(real_a) / float(plan_a)) * 100
 
-        if pd.notna(k_plan_m) and float(k_plan_m) != 0:
-            k_ader_mes = (float(k_real_m or 0) / float(k_plan_m)) * 100
-
+        plan_m = pd.to_numeric(pd.Series([k_plan_m]), errors="coerce").iloc[0]
+        real_mx = pd.to_numeric(pd.Series([k_real_m]), errors="coerce").iloc[0]
+        if pd.notna(plan_m) and float(plan_m) != 0:
+            k_ader_mes = (float(real_mx) / float(plan_m)) * 100
 
 
 # ============================================================
@@ -575,24 +579,24 @@ with tab_dash:
     with row2[3]:
         kpi_card_money("Variação", resumo.get("VARIAÇÃO (R$)"))
 
-    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
-
-    # ✅ 3 cards que você pediu voltar (antes dos gráficos)
-    row3 = st.columns(3)
-    with row3[0]:
-        kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
-    with row3[1]:
-        kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
-    with row3[2]:
-        color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
-        kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
-
     st.divider()
 
     left, right = st.columns([2.2, 1])
 
     # ====== Left: gráficos + prazo
     with left:
+        # ✅ 3 cards (agora ficam antes dos gráficos de barras)
+        row3 = st.columns(3)
+        with row3[0]:
+            kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
+        with row3[1]:
+            kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
+        with row3[2]:
+            color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
+            kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
+
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+
         g1, g2 = st.columns(2)
 
         with g1:
@@ -649,26 +653,23 @@ with tab_dash:
             with r1[1]:
                 kpi_card_pct("Planejado acumulado", k_plan_acum, f"ref: {ref_month_label}")
             with r1[2]:
-               ader_ratio = (k_ader_acc / 100) if k_ader_acc is not None else None
-               ader_color = PALETTE["good"] if (k_ader_acc is not None and k_ader_acc >= 100) else PALETTE["bad"]
-               kpi_card_pct_highlight("Aderência acumulada", ader_ratio, "(Real acum ÷ Plan acum)", value_color=ader_color)
-)
+                ader_ratio = (k_ader_acc / 100) if k_ader_acc is not None else None
+                ader_color = PALETTE["good"] if (k_ader_acc is not None and k_ader_acc >= 100) else PALETTE["bad"]
+                kpi_card_pct_highlight("Aderência acumulada", ader_ratio, "(Real acum ÷ Plan acum)", value_color=ader_color)
 
             st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
             r2 = st.columns(4)
-
             with r2[0]:
                 kpi_card_pct("Realizado mensal", k_real_m, f"ref: {ref_month_label}")
             with r2[1]:
                 kpi_card_pct("Previsto mensal", k_prev_m, f"ref: {ref_month_label}")
             with r2[2]:
                 kpi_card_pct("Planejado mensal", k_plan_m, f"ref: {ref_month_label}")
-                with r2[3]:
+            with r2[3]:
                 ader_mes_ratio = (k_ader_mes / 100) if k_ader_mes is not None else None
                 ader_mes_color = PALETTE["good"] if (k_ader_mes is not None and k_ader_mes >= 100) else PALETTE["bad"]
                 kpi_card_pct_highlight("Aderência do mês", ader_mes_ratio, "(Real mês ÷ Plan mês)", value_color=ader_mes_color)
-
 
             x = temp["MÊS"].tolist()
 
@@ -817,7 +818,10 @@ with tab_just:
         )
 
         if df is None or df.empty:
-            st.markdown(f"<div style='color:{PALETTE['muted']}; font-size:12px;'>Sem dados</div></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='color:{PALETTE['muted']}; font-size:12px;'>Sem dados</div></div>",
+                unsafe_allow_html=True,
+            )
             return
 
         tempj = df.copy()
