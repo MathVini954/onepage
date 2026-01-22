@@ -957,7 +957,7 @@ with tab_resumo:
         )
 
         if obra_sel:
-                    ws_det = wb[obra_sel]
+            ws_det = wb[obra_sel]
             df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
 
             top_cards = 3  # mude para 5 se quiser
