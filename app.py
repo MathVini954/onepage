@@ -859,7 +859,7 @@ with tab_resumo:
     else:
         df_show = df_orc_resumo.copy()
 
-        # --- helpers locais (não dependem do src.utils) ---
+        # --- helpers locais ---
         def _norm_colname(x: str) -> str:
             import unicodedata
             s = "" if x is None else str(x).strip()
@@ -867,25 +867,61 @@ with tab_resumo:
             s = "".join(ch for ch in s if not unicodedata.combining(ch))
             return " ".join(s.upper().split())
 
-        # garante OBRA como texto
+        # garante OBRA
         if "OBRA" in df_show.columns:
             df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
 
-        # colunas numéricas (tudo menos OBRA)
-        num_cols = [c for c in df_show.columns if _norm_colname(c) != "OBRA"]
-        for c in num_cols:
-            df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
-
-        # detectar a coluna de variação (qualquer nome que contenha VARIA)
+        # detectar coluna variação
         variacao_col = None
         for c in df_show.columns:
             if "VARIA" in _norm_colname(c):
                 variacao_col = c
                 break
 
-        # formatação BRL
-        fmt_map = {c: fmt_brl for c in num_cols}
+        # detectar colunas de mês (tudo que não é OBRA e não é VARIAÇÃO)
+        month_cols = []
+        for c in df_show.columns:
+            nc = _norm_colname(c)
+            if nc == "OBRA":
+                continue
+            if variacao_col is not None and c == variacao_col:
+                continue
+            month_cols.append(c)
 
+        # converte meses + variação pra número
+        for c in month_cols + ([variacao_col] if variacao_col else []):
+            if c is None:
+                continue
+            df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
+
+        # pega o "último mês" = última coluna de mês que tem algum valor (na planilha)
+        last_month_col = None
+        for c in reversed(month_cols):
+            if df_show[c].notna().any():
+                last_month_col = c
+                break
+
+        # UI: expandir meses
+        colA, colB = st.columns([1, 2])
+        with colA:
+            expandir = st.toggle("Expandir meses", value=False)
+        with colB:
+            if last_month_col:
+                st.caption(f"Padrão: exibindo **{last_month_col}** + **{variacao_col or 'VARIAÇÃO'}**")
+
+        # montar dataframe pra exibir
+        cols_base = ["OBRA"]
+        if expandir:
+            cols_base += month_cols
+        else:
+            if last_month_col:
+                cols_base += [last_month_col]
+        if variacao_col:
+            cols_base += [variacao_col]
+
+        df_view = df_show[cols_base].copy()
+
+        # estilo variação (vibrante)
         def style_variacao(s: pd.Series):
             v = pd.to_numeric(s, errors="coerce")
             out = []
@@ -893,31 +929,51 @@ with tab_resumo:
                 if pd.isna(x):
                     out.append("")
                 elif x > 0:
-                    # pior: vermelho vibrante
                     out.append("background-color:#ef4444; color:white; font-weight:900;")
                 elif x < 0:
-                    # melhor: verde vibrante
                     out.append("background-color:#22c55e; color:white; font-weight:900;")
                 else:
                     out.append("background-color:#94a3b8; color:white; font-weight:900;")
             return out
 
-        styler = df_show.style.format(fmt_map, na_rep="—")
+        # formatação BRL
+        fmt_cols = [c for c in df_view.columns if _norm_colname(c) != "OBRA"]
+        fmt_map = {c: fmt_brl for c in fmt_cols}
 
-        # aplicar estilo na coluna de variação (se existir)
-        if variacao_col is not None:
+        styler = df_view.style.format(fmt_map, na_rep="—")
+        if variacao_col and variacao_col in df_view.columns:
             styler = styler.apply(style_variacao, subset=[variacao_col])
-            # deixa a coluna mais “forte” visualmente
-            styler = styler.set_properties(
-                subset=[variacao_col],
-                **{
-                    "text-align": "right",
-                    "border-radius": "8px",
-                },
-            )
 
-        st.dataframe(
-            styler,
-            use_container_width=True,
-            hide_index=True,
+        st.dataframe(styler, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # ===== "Clique na variação" (equivalente): selecionar obra para ver detalhes =====
+        st.subheader("Detalhes (Economias e Desvios do mês)")
+        obra_sel = st.selectbox(
+            "Escolha a obra para ver os detalhes",
+            options=[x for x in df_show["OBRA"].dropna().tolist()] if "OBRA" in df_show.columns else [],
+            index=0 if ("OBRA" in df_show.columns and len(df_show["OBRA"].dropna()) > 0) else None,
         )
+
+        if obra_sel:
+            with st.expander(f"Ver detalhes — {obra_sel}", expanded=True):
+                # lê a aba da obra selecionada (mesma lógica do Dashboard)
+                ws_det = wb[obra_sel]
+                df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("### ACRÉSCIMOS / DESVIOS (mês)")
+                    if df_acres_det is None or df_acres_det.empty:
+                        st.info("Sem dados.")
+                    else:
+                        styled_dataframe(df_acres_det)
+
+                with c2:
+                    st.markdown("### ECONOMIAS (mês)")
+                    if df_econ_det is None or df_econ_det.empty:
+                        st.info("Sem dados.")
+                    else:
+                        styled_dataframe(df_econ_det)
+
