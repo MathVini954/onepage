@@ -18,7 +18,7 @@ from src.excel_reader import (
 )
 
 from src.logos import find_logo_path
-from src.utils import norm, is_blank, to_month, to_float, fmt_brl
+
 
 
 
