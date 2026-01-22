@@ -23,8 +23,12 @@ from src.utils import fmt_brl
 # ============================================================
 # Config
 # ============================================================
-st.set_page_config(page_title="Controle de Prazo e Custo", layout="wide")
+st.set_page_config(page_title="Controle Prazo e Custo", layout="wide")
 LOGOS_DIR = "assets/logos"
+
+GOOD = "#22c55e"
+BAD = "#ef4444"
+BLUE = "#3b82f6"
 
 
 # ============================================================
@@ -45,7 +49,6 @@ if excel_path is None:
 
 wb = load_wb(excel_path)
 obras = sheetnames(wb)
-
 if not obras:
     st.error("Nenhuma aba de obra encontrada no Excel.")
     st.stop()
@@ -64,20 +67,14 @@ st.sidebar.markdown("---")
 dark_mode = st.sidebar.toggle("Modo escuro", value=True)
 st.sidebar.caption(f"Tema: {'Escuro' if dark_mode else 'Claro'}")
 
-# Debug opcional (não quebra nada)
 debug = st.sidebar.toggle("Debug", value=False)
 
 ws = wb[obra]
 
 
 # ============================================================
-# Tema (blindado: NÃO mexe em color global)
+# Tema (blindado: NÃO mexe em cor global)
 # ============================================================
-GOOD = "#22c55e"
-BAD = "#ef4444"
-BLUE = "#3b82f6"
-
-
 def hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.strip().lstrip("#")
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -137,7 +134,7 @@ else:
 
 PLOTLY_TEMPLATE = PALETTE["plotly_template"]
 
-# ✅ CSS BLINDADO: só fundo/bordas/spacing. NÃO mexe em color global.
+# ✅ CSS blindado (não some com a tela)
 st.markdown(
     f"""
 <style>
@@ -240,6 +237,19 @@ def kpi_card_money(label: str, value: float | None):
   <div style="font-size:12px; color:{PALETTE["muted"]}; margin-bottom:6px;">{html.escape(label)}</div>
   <div style="font-size:24px; font-weight:900; line-height:1.05; color:{PALETTE["text"]};">{html.escape(brl_compact(value))}</div>
   <div style="font-size:11px; color:{PALETTE["muted"]}; margin-top:6px;">{html.escape(fmt_brl(value))}</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def kpi_card_money_highlight(label: str, value: float | None, value_color: str, subtitle: str = ""):
+    st.markdown(
+        f"""
+<div style="border:1px solid {PALETTE["border"]}; border-radius:14px; padding:12px 14px; background:{PALETTE["card"]}; height:92px;">
+  <div style="font-size:12px; color:{PALETTE["muted"]}; margin-bottom:6px;">{html.escape(label)}</div>
+  <div style="font-size:24px; font-weight:900; line-height:1.05; color:{value_color};">{html.escape(brl_compact(value))}</div>
+  <div style="font-size:11px; color:{PALETTE["muted"]}; margin-top:6px;">{html.escape(subtitle) if subtitle else html.escape(fmt_brl(value))}</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -361,16 +371,15 @@ def styled_dataframe(df: pd.DataFrame):
     st.dataframe(tbl.style.format(fmt_map), use_container_width=True, hide_index=True)
 
 
-# ============================================================
-# Debug (se ligado)
-# ============================================================
-if debug:
-    st.write("Arquivo:", excel_path.name)
-    st.write("Abas:", obras)
+def sum_abs_column(df: pd.DataFrame, col: str) -> float:
+    if df is None or df.empty or col not in df.columns:
+        return 0.0
+    s = pd.to_numeric(df[col], errors="coerce").dropna()
+    return float(s.abs().sum()) if not s.empty else 0.0
 
 
 # ============================================================
-# Header + logo
+# Header + logo (título já com nome da obra)
 # ============================================================
 colL, colR = st.columns([1, 5])
 with colL:
@@ -378,10 +387,13 @@ with colL:
     if logo_path:
         st.image(logo_path, use_container_width=True)
 with colR:
-    st.title("Controle de Prazo e Custo")
-    st.caption(f"Obra: {obra}  •  Arquivo: {excel_path.name}")
+    st.title(f"Controle de Prazo e Custo — {obra}")
 
 st.divider()
+
+if debug:
+    st.write("Arquivo:", excel_path.name)
+    st.write("Abas:", obras)
 
 
 # ============================================================
@@ -393,6 +405,11 @@ df_fin = read_financeiro(ws)
 df_prazo = read_prazo(ws)
 df_acres, df_econ = read_acrescimos_economias(ws)
 
+# Totais (cards que você pediu voltar)
+total_economias = sum_abs_column(df_econ, "VARIAÇÃO")
+total_acrescimos = sum_abs_column(df_acres, "VARIAÇÃO")
+desvio_liquido = total_acrescimos - total_economias  # >0 pior, <0 melhor
+
 
 # ============================================================
 # Índice do mês (último)
@@ -401,6 +418,7 @@ idx_last = None
 idx_month_label = "—"
 if not df_idx.empty and "ÍNDICE PROJETADO" in df_idx.columns:
     df_idx2 = df_idx.dropna(subset=["MÊS"]).sort_values("MÊS")
+    df_idx2["ÍNDICE PROJETADO"] = pd.to_numeric(df_idx2["ÍNDICE PROJETADO"], errors="coerce")
     df_idx2 = df_idx2.dropna(subset=["ÍNDICE PROJETADO"])
     if not df_idx2.empty:
         idx_last = float(df_idx2["ÍNDICE PROJETADO"].iloc[-1])
@@ -409,7 +427,7 @@ if not df_idx.empty and "ÍNDICE PROJETADO" in df_idx.columns:
 
 
 # ============================================================
-# Prazo (curvas + KPIs)
+# Prazo — preparar séries e CORTAR no último mês preenchido
 # ============================================================
 temp = pd.DataFrame()
 ref_month_label = "—"
@@ -433,53 +451,74 @@ real_acum = []
 if not df_prazo.empty and "MÊS" in df_prazo.columns:
     temp = df_prazo.copy().dropna(subset=["MÊS"]).sort_values("MÊS").reset_index(drop=True)
 
-    temp["PLANEJADO_M"] = temp.get("PLANEJADO MÊS (%)", None).apply(to_ratio) if "PLANEJADO MÊS (%)" in temp.columns else None
-    temp["PREVISTO_M"] = temp.get("PREVISTO MENSAL (%)", None).apply(to_ratio) if "PREVISTO MENSAL (%)" in temp.columns else None
-    temp["REAL_M"] = temp.get("REALIZADO Mês (%)", None).apply(to_ratio) if "REALIZADO Mês (%)" in temp.columns else None
+    # Series mensais (0-1)
+    temp["PLANEJADO_M"] = (
+        temp["PLANEJADO MÊS (%)"].apply(to_ratio) if "PLANEJADO MÊS (%)" in temp.columns else pd.NA
+    )
+    temp["PREVISTO_M"] = (
+        temp["PREVISTO MENSAL (%)"].apply(to_ratio) if "PREVISTO MENSAL (%)" in temp.columns else pd.NA
+    )
+    temp["REAL_M"] = (
+        temp["REALIZADO Mês (%)"].apply(to_ratio) if "REALIZADO Mês (%)" in temp.columns else pd.NA
+    )
 
-    # Planejado acumulado vindo do Excel (preferência)
+    # Planejado acumulado: preferir do Excel (se existir). Se não, cumsum mantendo NaN (não preenche com 0)
     if "PLANEJADO ACUM. (%)" in temp.columns:
         temp["PLANEJADO_ACUM"] = temp["PLANEJADO ACUM. (%)"].apply(to_ratio)
     else:
-        temp["PLANEJADO_ACUM"] = temp["PLANEJADO_M"].fillna(0).cumsum()
+        temp["PLANEJADO_ACUM"] = pd.to_numeric(temp["PLANEJADO_M"], errors="coerce").cumsum()
 
-    # Previsto acumulado: soma mês a mês
-    temp["PREVISTO_ACUM"] = temp["PREVISTO_M"].fillna(0).cumsum() if "PREVISTO_M" in temp.columns else None
+    # Previsto e Real acumulados: cumsum mantendo NaN (isso evita “linha reta até o fim”)
+    temp["PREVISTO_ACUM"] = pd.to_numeric(temp["PREVISTO_M"], errors="coerce").cumsum()
+    temp["REAL_ACUM"] = pd.to_numeric(temp["REAL_M"], errors="coerce").cumsum()
 
-    # Real acumulado: soma mês a mês
-    temp["REAL_ACUM"] = temp["REAL_M"].fillna(0).cumsum()
+    # 🔥 CORTAR O DATAFRAME NO ÚLTIMO MÊS QUE TEM QUALQUER DADO (plan/prev/real)
+    last_idxs = []
+    for col in ["PLANEJADO_M", "PREVISTO_M", "REAL_M", "PLANEJADO_ACUM", "PREVISTO_ACUM", "REAL_ACUM"]:
+        if col in temp.columns:
+            idx = temp[col].last_valid_index()
+            if idx is not None:
+                last_idxs.append(idx)
 
-    def kill_after_last(series: pd.Series) -> list[float | None]:
-        out = series.copy()
-        last = out.last_valid_index()
+    if last_idxs:
+        last_any = max(last_idxs)
+        temp = temp.iloc[: last_any + 1].copy()
+
+    # helper: após último valor válido, vira None (Plotly para a linha)
+    def series_stop_at_last(s: pd.Series) -> list[float | None]:
+        s = pd.to_numeric(s, errors="coerce")
+        last = s.last_valid_index()
         if last is None:
-            return [None] * len(out)
+            return [None] * len(s)
+        out = s.copy()
         for i in range(last + 1, len(out)):
-            out.iloc[i] = None
-        return out.tolist()
+            out.iloc[i] = pd.NA
+        return [None if pd.isna(v) else float(v) for v in out.tolist()]
 
-    planned_m = kill_after_last(temp["PLANEJADO_M"] * 100)
-    previsto_m = kill_after_last(temp["PREVISTO_M"] * 100) if "PREVISTO_M" in temp.columns else [None] * len(temp)
-    real_m = kill_after_last(temp["REAL_M"] * 100)
+    # % para gráfico
+    planned_m = [None if v is None else v * 100 for v in series_stop_at_last(temp["PLANEJADO_M"])]
+    previsto_m = [None if v is None else v * 100 for v in series_stop_at_last(temp["PREVISTO_M"])]
+    real_m = [None if v is None else v * 100 for v in series_stop_at_last(temp["REAL_M"])]
 
-    planned_acum = kill_after_last(temp["PLANEJADO_ACUM"] * 100)
-    previsto_acum = kill_after_last(temp["PREVISTO_ACUM"] * 100) if "PREVISTO_ACUM" in temp.columns else [None] * len(temp)
-    real_acum = kill_after_last(temp["REAL_ACUM"] * 100)
+    planned_acum = [None if v is None else v * 100 for v in series_stop_at_last(temp["PLANEJADO_ACUM"])]
+    previsto_acum = [None if v is None else v * 100 for v in series_stop_at_last(temp["PREVISTO_ACUM"])]
+    real_acum = [None if v is None else v * 100 for v in series_stop_at_last(temp["REAL_ACUM"])]
 
-    last_real = temp["REAL_M"].last_valid_index()
+    # ref mês: último real
+    last_real = pd.to_numeric(temp["REAL_M"], errors="coerce").last_valid_index()
     if last_real is not None:
         m = pd.to_datetime(temp.loc[last_real, "MÊS"])
         ref_month_label = m.strftime("%b/%Y").lower()
 
         k_real_m = temp.loc[last_real, "REAL_M"]
         k_plan_m = temp.loc[last_real, "PLANEJADO_M"]
-        k_prev_m = temp.loc[last_real, "PREVISTO_M"] if "PREVISTO_M" in temp.columns else None
+        k_prev_m = temp.loc[last_real, "PREVISTO_M"]
 
         k_real_acum = temp.loc[last_real, "REAL_ACUM"]
         k_plan_acum = temp.loc[last_real, "PLANEJADO_ACUM"]
-        k_prev_acum = temp.loc[last_real, "PREVISTO_ACUM"] if "PREVISTO_ACUM" in temp.columns else None
+        k_prev_acum = temp.loc[last_real, "PREVISTO_ACUM"]
 
-        if k_plan_acum and float(k_plan_acum) != 0:
+        if pd.notna(k_plan_acum) and float(k_plan_acum) != 0:
             k_ader_acc = (float(k_real_acum or 0) / float(k_plan_acum)) * 100
 
 
@@ -493,7 +532,7 @@ tab_dash, tab_just = st.tabs(["Dashboard", "Justificativas"])
 # TAB Dashboard
 # ============================================================
 with tab_dash:
-    # KPIs topo (8 cards)
+    # ===== KPIs financeiros (8)
     row1 = st.columns(4)
     with row1[0]:
         kpi_card_index("Índice do mês", idx_last, idx_month_label)
@@ -516,6 +555,18 @@ with tab_dash:
     with row2[3]:
         kpi_card_money("Variação", resumo.get("VARIAÇÃO (R$)"))
 
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+    # ✅ 3 cards que você pediu voltar (antes dos gráficos)
+    row3 = st.columns(3)
+    with row3[0]:
+        kpi_card_money_highlight("Total Economias (mês)", total_economias, PALETTE["good"])
+    with row3[1]:
+        kpi_card_money_highlight("Total Acréscimos (mês)", total_acrescimos, PALETTE["bad"])
+    with row3[2]:
+        color_desvio = PALETTE["bad"] if desvio_liquido > 0 else PALETTE["good"]
+        kpi_card_money_highlight("Desvio Líquido (Acrésc. − Econ.)", desvio_liquido, color_desvio)
+
     st.divider()
 
     left, right = st.columns([2.2, 1])
@@ -530,7 +581,14 @@ with tab_dash:
                 st.info("Sem dados do índice.")
             else:
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=df_idx["MÊS"], y=df_idx["ÍNDICE PROJETADO"], mode="lines+markers", name="Índice"))
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_idx["MÊS"],
+                        y=df_idx["ÍNDICE PROJETADO"],
+                        mode="lines+markers",
+                        name="Índice",
+                    )
+                )
                 fig.add_hline(y=1.0, line_dash="dash", line_width=1)
                 fig.update_layout(height=320)
                 st.plotly_chart(apply_plotly_theme(fig), use_container_width=True)
@@ -541,8 +599,22 @@ with tab_dash:
                 st.info("Sem dados financeiros.")
             else:
                 fig = go.Figure()
-                fig.add_trace(go.Bar(x=df_fin["MÊS"], y=df_fin["DESEMBOLSO DO MÊS (R$)"], name="Desembolso", marker_color=PALETTE["bar_des"]))
-                fig.add_trace(go.Bar(x=df_fin["MÊS"], y=df_fin["MEDIDO NO MÊS (R$)"], name="Medido", marker_color=PALETTE["bar_med"]))
+                fig.add_trace(
+                    go.Bar(
+                        x=df_fin["MÊS"],
+                        y=df_fin["DESEMBOLSO DO MÊS (R$)"],
+                        name="Desembolso",
+                        marker_color=PALETTE["bar_des"],
+                    )
+                )
+                fig.add_trace(
+                    go.Bar(
+                        x=df_fin["MÊS"],
+                        y=df_fin["MEDIDO NO MÊS (R$)"],
+                        name="Medido",
+                        marker_color=PALETTE["bar_med"],
+                    )
+                )
                 fig.update_layout(barmode="group", height=320)
                 st.plotly_chart(apply_plotly_theme(fig), use_container_width=True)
 
@@ -616,16 +688,22 @@ with tab_dash:
         econ_rows = build_rows(econ_items, color=PALETTE["good"], prefix="")
         acres_rows = build_rows(acres_items, color=PALETTE["bad"], prefix="- ")
 
-        st.markdown(card_resumo("PRINCIPAIS ECONOMIAS", "✅", econ_rows, PALETTE["good_border"], PALETTE["good_bg"]), unsafe_allow_html=True)
+        st.markdown(
+            card_resumo("PRINCIPAIS ECONOMIAS", "✅", econ_rows, PALETTE["good_border"], PALETTE["good_bg"]),
+            unsafe_allow_html=True,
+        )
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-        st.markdown(card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]), unsafe_allow_html=True)
+        st.markdown(
+            card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]),
+            unsafe_allow_html=True,
+        )
 
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
         progress_card(k_real_acum, k_plan_acum, ref_month_label)
 
     st.divider()
 
-    # ====== Detalhamento completo com degradê (top e tabela)
+    # ====== Detalhamento completo com degradê
     st.subheader("Detalhamento — Tabelas completas (com barras em degradê)")
 
     c1, c2 = st.columns(2)
