@@ -126,45 +126,40 @@ def _find_header_row(ws: Worksheet, must_contain_any: list[str], max_scan: int =
 
 def read_indice(ws: Worksheet) -> pd.DataFrame:
     """
-    Encontra a tabela 'MÊS' x 'ÍNDICE PROJETADO' em qualquer posição da aba,
-    mesmo se estiver à direita ou com células mescladas.
+    Lê a tabela do índice ignorando o título mesclado.
+    Procura a linha que contém 'MÊS' e 'ÍNDICE PROJETADO' na mesma linha.
     """
-    # 1) achar a linha de header procurando a célula "ÍNDICE PROJETADO"
+    max_r = min(ws.max_row or 1, 400)
+    max_c = min(ws.max_column or 1, 150)
+
     header_row = None
+    col_mes = None
     col_idx = None
 
-    max_r = min(ws.max_row or 1, 300)
-    max_c = min(ws.max_column or 1, 120)
-
+    # 1) achar a linha de header (tem que ter MES e INDICE PROJETADO na mesma linha)
     for r in range(1, max_r + 1):
+        c_mes_tmp = None
+        c_idx_tmp = None
+
         for c in range(1, max_c + 1):
             v = _norm(ws.cell(r, c).value)
-            if "INDICE" in v and "PROJETADO" in v:
-                header_row = r
-                col_idx = c
-                break
-        if header_row is not None:
+
+            if v == "MES":
+                c_mes_tmp = c
+
+            if ("INDICE" in v) and ("PROJETADO" in v):
+                c_idx_tmp = c
+
+        if c_mes_tmp is not None and c_idx_tmp is not None:
+            header_row = r
+            col_mes = c_mes_tmp
+            col_idx = c_idx_tmp
             break
 
-    if header_row is None:
+    if header_row is None or col_mes is None or col_idx is None:
         return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
 
-    # 2) na mesma linha do header, achar a coluna do "MÊS"
-    col_mes = None
-    for c in range(1, max_c + 1):
-        v = _norm(ws.cell(header_row, c).value)
-        if v == "MES" or v.endswith(" MES") or v.startswith("MES "):
-            col_mes = c
-            break
-
-    # fallback comum: mês está imediatamente à esquerda do índice
-    if col_mes is None and col_idx is not None and col_idx > 1:
-        col_mes = col_idx - 1
-
-    if col_mes is None or col_idx is None:
-        return pd.DataFrame(columns=["MÊS", "ÍNDICE PROJETADO"])
-
-    # 3) ler linhas abaixo até acabar o mês
+    # 2) ler pra baixo até acabar o mês
     rows = []
     blank_run = 0
     for r in range(header_row + 1, (ws.max_row or header_row + 1) + 1):
