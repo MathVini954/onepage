@@ -142,7 +142,7 @@ def card_resumo(title: str, icon: str, rows_html: str, border: str, bg: str) -> 
 """
 
 
-def progress_card(real_ratio: float | None, planned_ratio: float | None, start_label: str):
+def progress_card(real_ratio: float | None, planned_ratio: float | None, start_label: str, ref_month_label: str):
     real_ratio = clamp01(real_ratio)
     planned_ratio = clamp01(planned_ratio)
 
@@ -162,13 +162,17 @@ def progress_card(real_ratio: float | None, planned_ratio: float | None, start_l
             <div style="font-size:12px; opacity:0.65;">{html.escape(start_label)}</div>
           </div>
 
+          <div style="font-size:12px; opacity:0.65; margin-top:6px;">
+            referência: <b>{html.escape(ref_month_label)}</b>
+          </div>
+
           <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:flex-end;">
             <div>
-              <div style="font-size:12px; opacity:0.75;">Progresso Real</div>
+              <div style="font-size:12px; opacity:0.75;">Progresso Real (acum.)</div>
               <div style="font-size:28px; font-weight:900; line-height:1;">{real_pct:.0f}%</div>
             </div>
             <div style="text-align:right;">
-              <div style="font-size:12px; opacity:0.75;">Previsto</div>
+              <div style="font-size:12px; opacity:0.75;">Previsto (acum.)</div>
               <div style="font-size:16px; font-weight:900;">{planned_pct:.0f}%</div>
             </div>
           </div>
@@ -271,11 +275,9 @@ df_prazo = read_prazo(ws)
 df_acres, df_econ = read_acrescimos_economias(ws)
 
 # ----------------------------
-# KPIs (balões maiores) em 2 linhas: 4 + 3
+# KPIs (2 linhas: 4 + 3) + espaçamento
 # ----------------------------
 row1 = st.columns(4)
-row2 = st.columns(3)
-
 with row1[0]:
     kpi_card("Orç. Inicial", resumo.get("ORÇAMENTO INICIAL (R$)"))
 with row1[1]:
@@ -285,6 +287,9 @@ with row1[2]:
 with row1[3]:
     kpi_card("A Pagar", resumo.get("A PAGAR (R$)"))
 
+st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
+
+row2 = st.columns(3)
 with row2[0]:
     kpi_card("Saldo a Incorrer", resumo.get("SALDO A INCORRER (R$)"))
 with row2[1]:
@@ -294,8 +299,98 @@ with row2[2]:
 
 st.divider()
 
+
 # ----------------------------
-# Linha: gráficos + painel lateral (economias/desvios + progresso + aderência)
+# Pré-cálculo do Prazo (Acumulado + Mensal + Aderência mensal)
+# ----------------------------
+temp = pd.DataFrame()
+start_label = "—"
+ref_month_label = "—"
+
+planned_ratio = None
+real_ratio = None
+
+ader_pct_last = None
+delta_pp_last = None
+month_label_last = "—"
+
+# séries mensais (para gráfico)
+planned_m_pct = []
+real_m_pct = []
+adh_m_pct = []
+
+# séries acumuladas (para curva S)
+planned_acum_pct = []
+real_acum_pct = []
+
+if (not df_prazo.empty) and ("PLANEJADO MÊS (%)" in df_prazo.columns) and ("REALIZADO Mês (%)" in df_prazo.columns):
+    temp = df_prazo[["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)"]].copy()
+    temp["PLANEJADO_M"] = temp["PLANEJADO MÊS (%)"].apply(to_ratio)
+    temp["REAL_M"] = temp["REALIZADO Mês (%)"].apply(to_ratio)
+    temp = temp.dropna(subset=["MÊS"]).reset_index(drop=True)
+
+    if not temp.empty:
+        start = temp["MÊS"].iloc[0]
+        start_label = f"INÍCIO: {start.strftime('%b/%Y').lower()}"
+
+    temp["PLANEJADO_ACUM"] = temp["PLANEJADO_M"].fillna(0).cumsum()
+    temp["REAL_ACUM"] = temp["REAL_M"].fillna(0).cumsum()
+
+    last_planned = temp["PLANEJADO_M"].last_valid_index()
+    last_real = temp["REAL_M"].last_valid_index()
+
+    # acumulado em %
+    planned_acum_pct = (temp["PLANEJADO_ACUM"] * 100).tolist()
+    real_acum_pct = (temp["REAL_ACUM"] * 100).tolist()
+
+    # mensal em %
+    planned_m_pct = (temp["PLANEJADO_M"] * 100).tolist()
+    real_m_pct = (temp["REAL_M"] * 100).tolist()
+
+    # “morrer” no último mês com dado
+    if last_planned is not None:
+        for i in range(last_planned + 1, len(planned_acum_pct)):
+            planned_acum_pct[i] = None
+            planned_m_pct[i] = None
+    else:
+        planned_acum_pct = [None] * len(planned_acum_pct)
+        planned_m_pct = [None] * len(planned_m_pct)
+
+    if last_real is not None:
+        for i in range(last_real + 1, len(real_acum_pct)):
+            real_acum_pct[i] = None
+            real_m_pct[i] = None
+    else:
+        real_acum_pct = [None] * len(real_acum_pct)
+        real_m_pct = [None] * len(real_m_pct)
+
+    # aderência mensal (%) = Real mês / Planejado mês * 100
+    adh_m_pct = [None] * len(temp)
+    for i in range(len(temp)):
+        p = temp.loc[i, "PLANEJADO_M"]
+        r = temp.loc[i, "REAL_M"]
+        if pd.notna(p) and pd.notna(r) and float(p) != 0:
+            adh_m_pct[i] = (float(r) / float(p)) * 100
+
+    # referência: último mês REAL preenchido (para progresso e aderência “do mês”)
+    if last_real is not None:
+        real_ratio = float(temp.loc[last_real, "REAL_ACUM"])
+        planned_ratio = float(temp.loc[last_real, "PLANEJADO_ACUM"])
+
+        m = temp.loc[last_real, "MÊS"]
+        ref_month_label = m.strftime("%b/%Y").lower()
+        month_label_last = ref_month_label
+
+        p_m = temp.loc[last_real, "PLANEJADO_M"]
+        r_m = temp.loc[last_real, "REAL_M"]
+        if pd.notna(p_m) and pd.notna(r_m) and float(p_m) != 0:
+            ader = float(r_m) / float(p_m)
+            ader_pct_last = ader * 100
+            delta_pp_last = ader_pct_last - 100
+
+
+# ----------------------------
+# Linha: gráficos + painel lateral
 # ----------------------------
 left, right = st.columns([2.2, 1])
 
@@ -339,78 +434,70 @@ with left:
             fig.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Prazo — Curva S (Planejado x Real)")
-    temp = pd.DataFrame()
-    planned_ratio = None
-    real_ratio = None
-    month_label = "—"
-    ader_pct = None
-    delta_pp = None
-    start_label = "—"
-
-    if df_prazo.empty:
-        st.info("Sem dados de prazo.")
+    st.subheader("Prazo — Curva S + Avanço mensal + Aderência")
+    if temp.empty:
+        st.info("Sem dados de prazo (precisa 'PLANEJADO MÊS (%)' e 'REALIZADO Mês (%)').")
     else:
-        if "PLANEJADO MÊS (%)" not in df_prazo.columns or "REALIZADO Mês (%)" not in df_prazo.columns:
-            st.warning("Não achei as colunas: 'PLANEJADO MÊS (%)' e 'REALIZADO Mês (%)' no bloco de prazo.")
-        else:
-            temp = df_prazo[["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)"]].copy()
-            temp["PLANEJADO_M"] = temp["PLANEJADO MÊS (%)"].apply(to_ratio)
-            temp["REAL_M"] = temp["REALIZADO Mês (%)"].apply(to_ratio)
+        tab1, tab2 = st.tabs(["Curva S (Acumulado)", "Mensal (Avanço + Aderência)"])
 
-            temp = temp.dropna(subset=["MÊS"]).reset_index(drop=True)
-
-            if not temp.empty:
-                start = temp["MÊS"].iloc[0]
-                start_label = f"INÍCIO: {start.strftime('%b/%Y').lower()}"
-
-            # acumulados (calculados pelo app)
-            temp["PLANEJADO_ACUM"] = temp["PLANEJADO_M"].fillna(0).cumsum()
-            temp["REAL_ACUM"] = temp["REAL_M"].fillna(0).cumsum()
-
-            # "morrer" no último mês com dado
-            last_planned = temp["PLANEJADO_M"].last_valid_index()
-            last_real = temp["REAL_M"].last_valid_index()
-
+        with tab1:
             x = temp["MÊS"].tolist()
-            planned_y = (temp["PLANEJADO_ACUM"] * 100).tolist()
-            real_y = (temp["REAL_ACUM"] * 100).tolist()
-
-            if last_planned is not None:
-                for i in range(last_planned + 1, len(planned_y)):
-                    planned_y[i] = None
-            else:
-                planned_y = [None] * len(planned_y)
-
-            if last_real is not None:
-                for i in range(last_real + 1, len(real_y)):
-                    real_y[i] = None
-            else:
-                real_y = [None] * len(real_y)
 
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=x, y=planned_y, mode="lines+markers", name="Planejado (%)"))
-            fig.add_trace(go.Scatter(x=x, y=real_y, mode="lines+markers", name="Real (%)"))
-            fig.update_layout(height=300, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="%")
+            fig.add_trace(go.Scatter(x=x, y=planned_acum_pct, mode="lines+markers", name="Planejado acum. (%)"))
+            fig.add_trace(go.Scatter(x=x, y=real_acum_pct, mode="lines+markers", name="Real acum. (%)"))
+
+            fig.update_layout(
+                height=320,
+                margin=dict(l=10, r=10, t=10, b=10),
+                yaxis_title="%"
+            )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Referência para progresso e aderência: último mês REAL preenchido
-            ref_idx = last_real
+        with tab2:
+            x = temp["MÊS"].tolist()
 
-            if ref_idx is not None:
-                real_ratio = float(temp.loc[ref_idx, "REAL_ACUM"])
-                planned_ratio = float(temp.loc[ref_idx, "PLANEJADO_ACUM"])
+            fig = go.Figure()
 
-                m = temp.loc[ref_idx, "MÊS"]
-                month_label = m.strftime("%b/%Y").lower()
+            # avanço individual (mês)
+            fig.add_trace(go.Scatter(
+                x=x, y=planned_m_pct, mode="lines+markers",
+                name="Planejado mês (%)"
+            ))
+            fig.add_trace(go.Scatter(
+                x=x, y=real_m_pct, mode="lines+markers",
+                name="Real mês (%)"
+            ))
 
-                # Aderência do mês = Realizado Mês / Planejado Mês
-                p_m = temp.loc[ref_idx, "PLANEJADO_M"]
-                r_m = temp.loc[ref_idx, "REAL_M"]
-                if pd.notna(p_m) and pd.notna(r_m) and float(p_m) != 0:
-                    ader = float(r_m) / float(p_m)  # 1.10 -> 110%
-                    ader_pct = ader * 100
-                    delta_pp = ader_pct - 100
+            # aderência mês a mês (eixo direito)
+            fig.add_trace(go.Scatter(
+                x=x, y=adh_m_pct, mode="lines+markers",
+                name="Aderência (%)",
+                yaxis="y2"
+            ))
+
+            # linha base 100% na aderência
+            if len(x) >= 2:
+                fig.add_shape(
+                    type="line",
+                    x0=x[0], x1=x[-1],
+                    y0=100, y1=100,
+                    xref="x", yref="y2",
+                    line=dict(dash="dash", width=1)
+                )
+
+            fig.update_layout(
+                height=320,
+                margin=dict(l=10, r=10, t=10, b=10),
+                yaxis=dict(title="% (Avanço mensal)"),
+                yaxis2=dict(
+                    title="Aderência (%)",
+                    overlaying="y",
+                    side="right",
+                    showgrid=False
+                )
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 with right:
     # ---------- Cards "Principais Economias" e "Desvios do mês" ----------
@@ -452,12 +539,11 @@ with right:
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-    # Progresso (no último mês real) + Aderência do mês
-    progress_card(real_ratio, planned_ratio, start_label)
+    progress_card(real_ratio, planned_ratio, start_label, ref_month_label)
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-    adherence_card(month_label, ader_pct, delta_pp)
+    adherence_card(month_label_last, ader_pct_last, delta_pp_last)
 
 st.divider()
 
@@ -511,7 +597,7 @@ with colC:
 st.divider()
 
 # ----------------------------
-# Detalhamento + barras em degradê
+# Detalhamento — tabelas completas + barras em degradê
 # ----------------------------
 st.subheader("Detalhamento — Tabelas completas (com barras em degradê)")
 
@@ -527,7 +613,6 @@ with t1:
         show = show.sort_values("VARIAÇÃO", ascending=False)
         show_top = show.head(top_n) if top_n is not None else show
 
-        # barras em degradê (top 10)
         top_bar = show.head(10).iloc[::-1]
         vals = top_bar["VARIAÇÃO"].abs()
 
