@@ -865,7 +865,6 @@ with tab_resumo:
             df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
 
         fmt_map = {c: fmt_brl for c in num_cols}
-                fmt_map = {c: fmt_brl for c in num_cols}
 
         def style_variacao(s: pd.Series):
             # s é a coluna VARIAÇÃO
