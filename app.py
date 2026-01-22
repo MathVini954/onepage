@@ -61,7 +61,6 @@ ws = wb[obra]
 # Helpers UI
 # ----------------------------
 def fmt_brl_no_dec(v: float) -> str:
-    # R$ 677.363 (sem centavos, com separador BR)
     s = f"{float(v):,.0f}"
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {s}"
@@ -103,14 +102,14 @@ def kpi_card(label: str, value: float | None):
         f"""
         <div style="
             border: 1px solid rgba(255,255,255,0.10);
-            border-radius: 6px;
-            padding: 6px 8px;
+            border-radius: 18px;
+            padding: 18px 20px;
             background: rgba(255,255,255,0.03);
-            height: 100px;
+            height: 120px;
         ">
-            <div style="font-size: 12px; opacity: 0.75; margin-bottom: 6px;">{label}</div>
-            <div style="font-size: 20px; font-weight: 800; line-height: 1.05;">{brl_compact(value)}</div>
-            <div style="font-size: 12px; opacity: 0.65; margin-top: 6px;">{fmt_brl(value)}</div>
+            <div style="font-size: 13px; opacity: 0.75; margin-bottom: 8px;">{html.escape(label)}</div>
+            <div style="font-size: 32px; font-weight: 900; line-height: 1.05;">{html.escape(brl_compact(value))}</div>
+            <div style="font-size: 12px; opacity: 0.65; margin-top: 8px;">{html.escape(fmt_brl(value))}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -186,6 +185,41 @@ def progress_card(real_ratio: float | None, planned_ratio: float | None, start_l
     )
 
 
+def adherence_card(month_label: str, ader_pct: float | None, delta_pp: float | None):
+    if ader_pct is None:
+        st.markdown(
+            """
+            <div style="border:1px solid rgba(255,255,255,0.10); background:rgba(255,255,255,0.03); border-radius:16px; padding:14px 16px;">
+              <div style="font-size:12px; opacity:0.85; font-weight:800;">Aderência do mês</div>
+              <div style="opacity:0.65; font-size:12px; margin-top:6px;">Sem dados suficientes (precisa Planejado Mês e Realizado Mês no mesmo mês).</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    color = "#22c55e" if ader_pct >= 100 else "#ef4444"
+    sign = "+" if (delta_pp is not None and delta_pp >= 0) else ""
+    delta_txt = "—" if delta_pp is None else f"{sign}{delta_pp:.1f} p.p.".replace(".", ",")
+
+    st.markdown(
+        f"""
+        <div style="border:1px solid rgba(255,255,255,0.10); background:rgba(255,255,255,0.03); border-radius:16px; padding:14px 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; opacity:0.85; font-weight:800;">Aderência do mês</div>
+            <div style="font-size:12px; opacity:0.65;">{html.escape(month_label)}</div>
+          </div>
+          <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:flex-end;">
+            <div style="font-size:28px; font-weight:900; color:{color}; line-height:1;">{ader_pct:.0f}%</div>
+            <div style="font-size:12px; opacity:0.75; font-weight:700;">{delta_txt}</div>
+          </div>
+          <div style="font-size:12px; opacity:0.65; margin-top:6px;">(Realizado ÷ Planejado)</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def resumo_variacoes(df_acres: pd.DataFrame, df_econ: pd.DataFrame) -> dict:
     acres_var = pd.to_numeric(df_acres.get("VARIAÇÃO", pd.Series(dtype=float)), errors="coerce").fillna(0)
     econ_var = pd.to_numeric(df_econ.get("VARIAÇÃO", pd.Series(dtype=float)), errors="coerce").fillna(0)
@@ -199,21 +233,17 @@ def resumo_variacoes(df_acres: pd.DataFrame, df_econ: pd.DataFrame) -> dict:
 
 
 def styled_dataframe(df: pd.DataFrame):
-    """Mostra tabela completa com formatação BRL nas colunas numéricas padrão."""
     if df.empty:
         st.info("Sem dados.")
         return
-
     tbl = df.copy()
     for col in ["ORÇAMENTO INICIAL", "ORÇAMENTO REAJUSTADO", "CUSTO FINAL", "VARIAÇÃO"]:
         if col in tbl.columns:
             tbl[col] = pd.to_numeric(tbl[col], errors="coerce")
-
     fmt_map = {}
     for col in ["ORÇAMENTO INICIAL", "ORÇAMENTO REAJUSTADO", "CUSTO FINAL", "VARIAÇÃO"]:
         if col in tbl.columns:
             fmt_map[col] = fmt_brl
-
     st.dataframe(tbl.style.format(fmt_map), use_container_width=True, hide_index=True)
 
 
@@ -241,28 +271,31 @@ df_prazo = read_prazo(ws)
 df_acres, df_econ = read_acrescimos_economias(ws)
 
 # ----------------------------
-# KPIs (cards)
+# KPIs (balões maiores) em 2 linhas: 4 + 3
 # ----------------------------
-k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
-with k1:
+row1 = st.columns(4)
+row2 = st.columns(3)
+
+with row1[0]:
     kpi_card("Orç. Inicial", resumo.get("ORÇAMENTO INICIAL (R$)"))
-with k2:
+with row1[1]:
     kpi_card("Orç. Reajust.", resumo.get("ORÇAMENTO REAJUSTADO (R$)"))
-with k3:
+with row1[2]:
     kpi_card("Desembolso Acum.", resumo.get("DESEMBOLSO ACUMULADO (R$)"))
-with k4:
+with row1[3]:
     kpi_card("A Pagar", resumo.get("A PAGAR (R$)"))
-with k5:
+
+with row2[0]:
     kpi_card("Saldo a Incorrer", resumo.get("SALDO A INCORRER (R$)"))
-with k6:
+with row2[1]:
     kpi_card("Custo Final", resumo.get("CUSTO FINAL (R$)"))
-with k7:
+with row2[2]:
     kpi_card("Variação", resumo.get("VARIAÇÃO (R$)"))
 
 st.divider()
 
 # ----------------------------
-# Linha: gráficos + painel lateral (economias/desvios + progresso)
+# Linha: gráficos + painel lateral (economias/desvios + progresso + aderência)
 # ----------------------------
 left, right = st.columns([2.2, 1])
 
@@ -291,39 +324,93 @@ with left:
             st.info("Sem dados financeiros.")
         else:
             fig = go.Figure()
-            fig.add_trace(go.Bar(x=df_fin["MÊS"], y=df_fin["DESEMBOLSO DO MÊS (R$)"], name="Desembolso"))
-            fig.add_trace(go.Bar(x=df_fin["MÊS"], y=df_fin["MEDIDO NO MÊS (R$)"], name="Medido"))
+            fig.add_trace(go.Bar(
+                x=df_fin["MÊS"],
+                y=df_fin["DESEMBOLSO DO MÊS (R$)"],
+                name="Desembolso",
+                marker_color="rgba(59,130,246,0.85)"  # azul
+            ))
+            fig.add_trace(go.Bar(
+                x=df_fin["MÊS"],
+                y=df_fin["MEDIDO NO MÊS (R$)"],
+                name="Medido",
+                marker_color="rgba(34,197,94,0.85)"   # verde
+            ))
             fig.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Prazo — Curva S (Planejado x Real)")
+    temp = pd.DataFrame()
+    planned_ratio = None
+    real_ratio = None
+    month_label = "—"
+    ader_pct = None
+    delta_pp = None
+    start_label = "—"
+
     if df_prazo.empty:
         st.info("Sem dados de prazo.")
-        temp = pd.DataFrame()
     else:
         if "PLANEJADO MÊS (%)" not in df_prazo.columns or "REALIZADO Mês (%)" not in df_prazo.columns:
             st.warning("Não achei as colunas: 'PLANEJADO MÊS (%)' e 'REALIZADO Mês (%)' no bloco de prazo.")
-            temp = pd.DataFrame()
         else:
             temp = df_prazo[["MÊS", "PLANEJADO MÊS (%)", "REALIZADO Mês (%)"]].copy()
             temp["PLANEJADO_M"] = temp["PLANEJADO MÊS (%)"].apply(to_ratio)
             temp["REAL_M"] = temp["REALIZADO Mês (%)"].apply(to_ratio)
 
-            temp = temp.dropna(subset=["MÊS"])
+            temp = temp.dropna(subset=["MÊS"]).reset_index(drop=True)
+
+            if not temp.empty:
+                start = temp["MÊS"].iloc[0]
+                start_label = f"INÍCIO: {start.strftime('%b/%Y').lower()}"
+
+            # acumulados (calculados pelo app)
             temp["PLANEJADO_ACUM"] = temp["PLANEJADO_M"].fillna(0).cumsum()
             temp["REAL_ACUM"] = temp["REAL_M"].fillna(0).cumsum()
 
+            # "morrer" no último mês com dado
+            last_planned = temp["PLANEJADO_M"].last_valid_index()
+            last_real = temp["REAL_M"].last_valid_index()
+
+            x = temp["MÊS"].tolist()
+            planned_y = (temp["PLANEJADO_ACUM"] * 100).tolist()
+            real_y = (temp["REAL_ACUM"] * 100).tolist()
+
+            if last_planned is not None:
+                for i in range(last_planned + 1, len(planned_y)):
+                    planned_y[i] = None
+            else:
+                planned_y = [None] * len(planned_y)
+
+            if last_real is not None:
+                for i in range(last_real + 1, len(real_y)):
+                    real_y[i] = None
+            else:
+                real_y = [None] * len(real_y)
+
             fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=temp["MÊS"], y=temp["PLANEJADO_ACUM"] * 100,
-                mode="lines+markers", name="Planejado (%)"
-            ))
-            fig.add_trace(go.Scatter(
-                x=temp["MÊS"], y=temp["REAL_ACUM"] * 100,
-                mode="lines+markers", name="Real (%)"
-            ))
+            fig.add_trace(go.Scatter(x=x, y=planned_y, mode="lines+markers", name="Planejado (%)"))
+            fig.add_trace(go.Scatter(x=x, y=real_y, mode="lines+markers", name="Real (%)"))
             fig.update_layout(height=300, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="%")
             st.plotly_chart(fig, use_container_width=True)
+
+            # Referência para progresso e aderência: último mês REAL preenchido
+            ref_idx = last_real
+
+            if ref_idx is not None:
+                real_ratio = float(temp.loc[ref_idx, "REAL_ACUM"])
+                planned_ratio = float(temp.loc[ref_idx, "PLANEJADO_ACUM"])
+
+                m = temp.loc[ref_idx, "MÊS"]
+                month_label = m.strftime("%b/%Y").lower()
+
+                # Aderência do mês = Realizado Mês / Planejado Mês
+                p_m = temp.loc[ref_idx, "PLANEJADO_M"]
+                r_m = temp.loc[ref_idx, "REAL_M"]
+                if pd.notna(p_m) and pd.notna(r_m) and float(p_m) != 0:
+                    ader = float(r_m) / float(p_m)  # 1.10 -> 110%
+                    ader_pct = ader * 100
+                    delta_pp = ader_pct - 100
 
 with right:
     # ---------- Cards "Principais Economias" e "Desvios do mês" ----------
@@ -333,8 +420,7 @@ with right:
     if not df_econ.empty and "VARIAÇÃO" in df_econ.columns:
         econ_sorted = df_econ.copy()
         econ_sorted["__v"] = pd.to_numeric(econ_sorted["VARIAÇÃO"], errors="coerce")
-        # Em economias, normalmente VARIAÇÃO vem negativa -> mais negativo primeiro
-        econ_sorted = econ_sorted.sort_values("__v", ascending=True)
+        econ_sorted = econ_sorted.sort_values("__v", ascending=True)  # mais negativo primeiro
         for _, r in econ_sorted.head(3).iterrows():
             econ_items.append((str(r.get("DESCRIÇÃO", "")), float(r.get("__v", 0) or 0)))
 
@@ -366,25 +452,17 @@ with right:
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-    # ---------- Progresso no estilo print ----------
-    real_ratio = None
-    planned_ratio = None
-    start_label = "—"
-    if not temp.empty:
-        start = temp["MÊS"].iloc[0]
-        try:
-            start_label = f"INÍCIO: {start.strftime('%b/%Y').lower()}"
-        except Exception:
-            start_label = "INÍCIO: —"
-        planned_ratio = float(temp["PLANEJADO_ACUM"].iloc[-1])
-        real_ratio = float(temp["REAL_ACUM"].iloc[-1])
-
+    # Progresso (no último mês real) + Aderência do mês
     progress_card(real_ratio, planned_ratio, start_label)
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+    adherence_card(month_label, ader_pct, delta_pp)
 
 st.divider()
 
 # ----------------------------
-# Resumo do mês (texto + KPIs)
+# Resumo do mês (Economias x Desvios)
 # ----------------------------
 st.subheader("Resumo do mês (Economias x Desvios)")
 
@@ -398,7 +476,7 @@ with colA:
     st.markdown(
         f"""
         <div style="border:1px solid rgba(255,255,255,0.10); background:rgba(255,255,255,0.03); border-radius:16px; padding:14px 16px;">
-          <div style="font-size:12px; opacity:0.75; font-weight:800;">{label}</div>
+          <div style="font-size:12px; opacity:0.75; font-weight:800;">{html.escape(label)}</div>
           <div style="font-size:28px; font-weight:900; color:{color};">{fmt_brl(abs(saldo))}</div>
           <div style="font-size:12px; opacity:0.65;">(saldo = desvios + economias)</div>
         </div>
@@ -433,9 +511,9 @@ with colC:
 st.divider()
 
 # ----------------------------
-# Tabelas completas + gráfico visual de variação (R$)
+# Detalhamento + barras em degradê
 # ----------------------------
-st.subheader("Detalhamento — Tabelas completas")
+st.subheader("Detalhamento — Tabelas completas (com barras em degradê)")
 
 t1, t2 = st.columns(2)
 
@@ -447,18 +525,22 @@ with t1:
         show = df_acres.copy()
         show["VARIAÇÃO"] = pd.to_numeric(show["VARIAÇÃO"], errors="coerce")
         show = show.sort_values("VARIAÇÃO", ascending=False)
-        if top_n is not None:
-            show_top = show.head(top_n)
-        else:
-            show_top = show
+        show_top = show.head(top_n) if top_n is not None else show
 
-        # barras (top 10)
+        # barras em degradê (top 10)
         top_bar = show.head(10).iloc[::-1]
+        vals = top_bar["VARIAÇÃO"].abs()
+
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            x=top_bar["VARIAÇÃO"].abs(),
+            x=vals,
             y=top_bar["DESCRIÇÃO"],
             orientation="h",
+            marker=dict(
+                color=vals,
+                colorscale=[[0, "rgba(239,68,68,0.25)"], [1, "rgba(239,68,68,1.0)"]],
+                showscale=False
+            ),
             name="R$"
         ))
         fig.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="R$")
@@ -475,17 +557,21 @@ with t2:
         show = df_econ.copy()
         show["VARIAÇÃO"] = pd.to_numeric(show["VARIAÇÃO"], errors="coerce")
         show = show.sort_values("VARIAÇÃO", ascending=True)
-        if top_n is not None:
-            show_top = show.head(top_n)
-        else:
-            show_top = show
+        show_top = show.head(top_n) if top_n is not None else show
 
         top_bar = show.head(10).iloc[::-1]
+        vals = top_bar["VARIAÇÃO"].abs()
+
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            x=top_bar["VARIAÇÃO"].abs(),
+            x=vals,
             y=top_bar["DESCRIÇÃO"],
             orientation="h",
+            marker=dict(
+                color=vals,
+                colorscale=[[0, "rgba(34,197,94,0.25)"], [1, "rgba(34,197,94,1.0)"]],
+                showscale=False
+            ),
             name="R$"
         ))
         fig.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="R$")
