@@ -51,6 +51,9 @@ if excel_path is None:
 
 wb = load_wb(excel_path)
 obras = sheetnames(wb)
+# ✅ Aba extra (não interfere no Dashboard/Justificativas)
+df_orc_resumo = read_orcamento_resumo(wb)
+
 if not obras:
     st.error("Nenhuma aba de obra encontrada no Excel.")
     st.stop()
@@ -532,7 +535,8 @@ if df_prazo is not None and not df_prazo.empty and "MÊS" in df_prazo.columns:
 # ============================================================
 # Tabs
 # ============================================================
-tab_dash, tab_just = st.tabs(["Dashboard", "Justificativas"])
+tab_dash, tab_just, tab_resumo = st.tabs(["Dashboard", "Justificativas", "Resumo Obras"])
+
 
 
 # ============================================================
@@ -845,3 +849,31 @@ if debug:
     st.write("Arquivo:", excel_path.name)
     st.write("Obras:", obras)
     st.write("df_idx.head():", df_idx.head() if df_idx is not None else None)
+    # ============================================================
+# TAB Resumo Obras (ORÇAMENTO_RESUMO)
+# ============================================================
+with tab_resumo:
+    st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
+
+      if df_orc_resumo is None or df_orc_resumo.empty:
+        st.info("A aba **ORÇAMENTO_RESUMO** não foi encontrada ou está vazia.")
+    else:
+        df_show = df_orc_resumo.copy()
+
+        # garante OBRA como texto
+        if "OBRA" in df_show.columns:
+            df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
+
+        # todas as outras colunas (meses + VARIAÇÃO) como número
+        num_cols = [c for c in df_show.columns if c != "OBRA"]
+        for c in num_cols:
+            df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
+
+        # formatação BRL igual ao resto do app
+        fmt_map = {c: fmt_brl for c in num_cols}
+        st.dataframe(
+            df_show.style.format(fmt_map),
+            use_container_width=True,
+            hide_index=True
+        )
+
