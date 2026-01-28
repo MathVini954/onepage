@@ -851,6 +851,7 @@ if debug:
     st.write("df_idx.head():", df_idx.head() if df_idx is not None else None)
 
 
+# === ABA: RESUMO (ORÇAMENTO_RESUMO) ===
 with tab_resumo:
     st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
 
@@ -859,9 +860,14 @@ with tab_resumo:
     else:
         df_show = df_orc_resumo.copy()
 
-        # --- helpers locais ---
+        # =========================
+        # Helpers / Preparação
+        # =========================
+        import re
+        import unicodedata
+        import pandas as pd
+
         def _norm_colname(x: str) -> str:
-            import unicodedata
             s = "" if x is None else str(x).strip()
             s = unicodedata.normalize("NFKD", s)
             s = "".join(ch for ch in s if not unicodedata.combining(ch))
@@ -870,8 +876,11 @@ with tab_resumo:
         # garante OBRA
         if "OBRA" in df_show.columns:
             df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
+        else:
+            st.error("A coluna **OBRA** não foi encontrada na aba ORÇAMENTO_RESUMO.")
+            st.stop()
 
-        # detectar coluna variação
+        # detectar coluna variação (primeira que contenha 'VARIA')
         variacao_col = None
         for c in df_show.columns:
             if "VARIA" in _norm_colname(c):
@@ -894,103 +903,229 @@ with tab_resumo:
                 continue
             df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
 
-        # pega o "último mês" = última coluna de mês que tem algum valor (na planilha)
-        last_month_col = None
-        for c in reversed(month_cols):
-            if df_show[c].notna().any():
-                last_month_col = c
-                break
+        # =========================
+        # Ordenação dos meses
+        # =========================
+        def _month_sort_key(col):
+            # tenta entender: 01/2026, 1/2026, JAN/2026, JAN 2026 etc.
+            s = _norm_colname(col)
 
-        # UI: expandir meses
-        colA, colB = st.columns([1, 2])
-        with colA:
-            expandir = st.toggle("Expandir meses", value=False)
-        with colB:
-            if last_month_col:
-                st.caption(f"Padrão: exibindo **{last_month_col}** + **{variacao_col or 'VARIAÇÃO'}**")
+            # 01/2026
+            m = re.search(r"\b(\d{1,2})\s*/\s*(\d{4})\b", s)
+            if m:
+                mm = int(m.group(1))
+                yy = int(m.group(2))
+                if 1 <= mm <= 12:
+                    return pd.Timestamp(yy, mm, 1)
 
-        # montar dataframe pra exibir
-        cols_base = ["OBRA"]
-        if expandir:
-            cols_base += month_cols
+            # JAN/2026
+            pt = {
+                "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
+                "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12
+            }
+            m2 = re.search(r"\b(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\b", s)
+            y2 = re.search(r"\b(20\d{2})\b", s)
+            if m2 and y2:
+                mm = pt[m2.group(1)]
+                yy = int(y2.group(1))
+                return pd.Timestamp(yy, mm, 1)
+
+            # fallback: joga pro fim mantendo algo estável
+            return pd.Timestamp(2999, 12, 1)
+
+        # mantém só meses com algum valor e ordena
+        month_cols_sorted = [c for c in month_cols if df_show[c].notna().any()]
+        month_cols_sorted = sorted(month_cols_sorted, key=_month_sort_key) if month_cols_sorted else []
+
+        # =========================
+        # FILTRO DE PERÍODO (TOPO)
+        # =========================
+        st.markdown("#### Período de visualização")
+
+        if not month_cols_sorted:
+            st.warning("Não encontrei colunas de mês com valores para montar o período.")
+            sel_month_cols = []
+        else:
+            if len(month_cols_sorted) == 1:
+                sel_month_cols = month_cols_sorted[:]
+                st.caption(f"Somente 1 mês disponível: **{sel_month_cols[0]}**")
+            else:
+                # default: últimos 6 meses (se tiver)
+                start_idx = max(0, len(month_cols_sorted) - 6)
+                default_range = (month_cols_sorted[start_idx], month_cols_sorted[-1])
+
+                periodo = st.select_slider(
+                    "Selecione o período (mês inicial → mês final)",
+                    options=month_cols_sorted,
+                    value=default_range,
+                    key="periodo_resumo_orc",
+                )
+
+                i0 = month_cols_sorted.index(periodo[0])
+                i1 = month_cols_sorted.index(periodo[1])
+                if i0 > i1:
+                    i0, i1 = i1, i0
+                sel_month_cols = month_cols_sorted[i0:i1 + 1]
+
+        last_month_col = sel_month_cols[-1] if sel_month_cols else None
+
+        # =========================
+        # CONTROLES VISUAIS
+        # =========================
+        c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.4, 2.2])
+        with c1:
+            expandir = st.toggle("Mostrar colunas mês a mês", value=False, key="exp_meses_orc")
+        with c2:
+            ordenar_impacto = st.toggle("Ordenar por maior impacto", value=True, key="ord_impacto_orc")
+        with c3:
+            somente_com_mov = st.toggle("Somente com movimento", value=False, key="mov_orc")
+        with c4:
+            busca_obra = st.text_input("Buscar obra", value="", placeholder="Digite parte do nome...", key="busca_orc")
+
+        if last_month_col:
+            st.caption(f"Período até **{last_month_col}** | Variação final: **{variacao_col or 'N/A'}**")
+
+        # =========================
+        # MONTA TABELA MAIS VISUAL
+        # =========================
+        df_view = df_show.copy()
+
+        # Filtro: busca obra
+        if busca_obra.strip():
+            mask = df_view["OBRA"].astype(str).str.upper().str.contains(busca_obra.strip().upper(), na=False)
+            df_view = df_view[mask].copy()
+
+        # Filtro: somente com movimento no período (qualquer mês != 0 / notna)
+        if somente_com_mov and sel_month_cols:
+            m = df_view[sel_month_cols].copy()
+            has_mov = m.notna().any(axis=1) & (m.fillna(0).abs().sum(axis=1) > 0)
+            df_view = df_view[has_mov].copy()
+
+        # Sparkline: linha mês a mês do período selecionado
+        if sel_month_cols:
+            df_view["TENDÊNCIA (período)"] = df_view[sel_month_cols].values.tolist()
+        else:
+            df_view["TENDÊNCIA (período)"] = [[] for _ in range(len(df_view))]
+
+        # Sinal visual da variação final (mantém a VARIAÇÃO como coluna numérica)
+        if variacao_col and variacao_col in df_view.columns:
+            def _sinal(v):
+                try:
+                    v = float(v)
+                except Exception:
+                    return "—"
+                if v > 0:
+                    return "🟥"  # desvio (pior)
+                if v < 0:
+                    return "🟩"  # economia (melhor)
+                return "⚪"
+            df_view["SINAL"] = df_view[variacao_col].apply(_sinal)
+
+        # Seleção de colunas (visual)
+        cols_out = ["OBRA", "TENDÊNCIA (período)"]
+
+        if expandir and sel_month_cols:
+            cols_out += sel_month_cols
         else:
             if last_month_col:
-                cols_base += [last_month_col]
+                cols_out += [last_month_col]
+
         if variacao_col:
-            cols_base += [variacao_col]
+            if "SINAL" in df_view.columns:
+                cols_out += ["SINAL", variacao_col]
+            else:
+                cols_out += [variacao_col]
 
-        df_view = df_show[cols_base].copy()
+        df_view = df_view[cols_out].copy()
 
-        # estilo variação (vibrante)
-        def style_variacao(s: pd.Series):
-            v = pd.to_numeric(s, errors="coerce")
-            out = []
-            for x in v:
-                if pd.isna(x):
-                    out.append("")
-                elif x > 0:
-                    out.append("background-color:#ef4444; color:white; font-weight:900;")
-                elif x < 0:
-                    out.append("background-color:#22c55e; color:white; font-weight:900;")
-                else:
-                    out.append("background-color:#94a3b8; color:white; font-weight:900;")
-            return out
+        # Ordenação por maior impacto (abs da variação final)
+        if ordenar_impacto and variacao_col and variacao_col in df_view.columns:
+            df_view["__abs_var"] = pd.to_numeric(df_view[variacao_col], errors="coerce").abs()
+            df_view = df_view.sort_values("__abs_var", ascending=False).drop(columns=["__abs_var"])
 
-        # formatação BRL
-        fmt_cols = [c for c in df_view.columns if _norm_colname(c) != "OBRA"]
-        fmt_map = {c: fmt_brl for c in fmt_cols}
+        # Configuração de colunas (sparkline + moeda)
+        col_cfg = {
+            "TENDÊNCIA (período)": st.column_config.LineChartColumn(
+                "Tendência (período)",
+                help="Linha mês a mês do período selecionado (por obra).",
+                width="medium",
+            )
+        }
 
-        styler = df_view.style.format(fmt_map, na_rep="—")
-        if variacao_col and variacao_col in df_view.columns:
-            styler = styler.apply(style_variacao, subset=[variacao_col])
+        # Formato moeda (se preferir, pode trocar por fmt_brl via string no seu fmt)
+        money_fmt = "R$ %.2f"
 
-        st.dataframe(styler, use_container_width=True, hide_index=True)
+        for c in df_view.columns:
+            if _norm_colname(c) == "OBRA" or c in ("TENDÊNCIA (período)", "SINAL"):
+                continue
+            col_cfg[c] = st.column_config.NumberColumn(c, format=money_fmt)
+
+        if "SINAL" in df_view.columns:
+            col_cfg["SINAL"] = st.column_config.TextColumn(" ", width="small")
+
+        st.dataframe(
+            df_view,
+            use_container_width=True,
+            hide_index=True,
+            column_config=col_cfg,
+        )
 
         st.markdown("---")
 
-        # ===== "Clique na variação" (equivalente): selecionar obra para ver detalhes =====
+        # =========================
+        # DETALHES (mantém como você já tinha)
+        # =========================
         st.subheader("Detalhes (Economias e Desvios do mês)")
+
+        obras_opts = df_show["OBRA"].dropna().astype(str).str.strip().tolist()
+        obras_opts = [o for o in obras_opts if o]  # remove vazios
         obra_sel = st.selectbox(
             "Escolha a obra para ver os detalhes",
-            options=[x for x in df_show["OBRA"].dropna().tolist()] if "OBRA" in df_show.columns else [],
-            index=0 if ("OBRA" in df_show.columns and len(df_show["OBRA"].dropna()) > 0) else None,
+            options=obras_opts,
+            index=0 if len(obras_opts) > 0 else None,
+            key="obra_sel_orc",
         )
 
         if obra_sel:
-            ws_det = wb[obra_sel]
-            df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
+            # abre a planilha da obra
+            try:
+                ws_det = wb[obra_sel]  # wb deve existir no seu app (openpyxl workbook)
+            except Exception:
+                st.error(f"Não encontrei a aba da obra **{obra_sel}** dentro do arquivo.")
+            else:
+                df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
 
-            top_cards = 3  # mude para 5 se quiser
+                top_cards = 3  # mude para 5 se quiser
 
-            econ_items = []
-            if df_econ_det is not None and not df_econ_det.empty and "VARIAÇÃO" in df_econ_det.columns:
-                econ_sorted = df_econ_det.copy()
-                econ_sorted["__v"] = pd.to_numeric(econ_sorted["VARIAÇÃO"], errors="coerce")
-                econ_sorted = econ_sorted.dropna(subset=["__v"])
-                econ_sorted["__abs"] = econ_sorted["__v"].abs()
-                econ_sorted = econ_sorted.sort_values("__abs", ascending=False).head(top_cards)
-                for _, r in econ_sorted.iterrows():
-                    econ_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+                econ_items = []
+                if df_econ_det is not None and not df_econ_det.empty and "VARIAÇÃO" in df_econ_det.columns:
+                    econ_sorted = df_econ_det.copy()
+                    econ_sorted["__v"] = pd.to_numeric(econ_sorted["VARIAÇÃO"], errors="coerce")
+                    econ_sorted = econ_sorted.dropna(subset=["__v"])
+                    econ_sorted["__abs"] = econ_sorted["__v"].abs()
+                    econ_sorted = econ_sorted.sort_values("__abs", ascending=False).head(top_cards)
+                    for _, r in econ_sorted.iterrows():
+                        econ_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
 
-            acres_items = []
-            if df_acres_det is not None and not df_acres_det.empty and "VARIAÇÃO" in df_acres_det.columns:
-                acres_sorted = df_acres_det.copy()
-                acres_sorted["__v"] = pd.to_numeric(acres_sorted["VARIAÇÃO"], errors="coerce")
-                acres_sorted = acres_sorted.dropna(subset=["__v"])
-                acres_sorted["__abs"] = acres_sorted["__v"].abs()
-                acres_sorted = acres_sorted.sort_values("__abs", ascending=False).head(top_cards)
-                for _, r in acres_sorted.iterrows():
-                    acres_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+                acres_items = []
+                if df_acres_det is not None and not df_acres_det.empty and "VARIAÇÃO" in df_acres_det.columns:
+                    acres_sorted = df_acres_det.copy()
+                    acres_sorted["__v"] = pd.to_numeric(acres_sorted["VARIAÇÃO"], errors="coerce")
+                    acres_sorted = acres_sorted.dropna(subset=["__v"])
+                    acres_sorted["__abs"] = acres_sorted["__v"].abs()
+                    acres_sorted = acres_sorted.sort_values("__abs", ascending=False).head(top_cards)
+                    for _, r in acres_sorted.iterrows():
+                        acres_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
 
-            econ_rows = build_rows(econ_items, color=PALETTE["good"], prefix="")
-            acres_rows = build_rows(acres_items, color=PALETTE["bad"], prefix="- ")
+                econ_rows = build_rows(econ_items, color=PALETTE["good"], prefix="")
+                acres_rows = build_rows(acres_items, color=PALETTE["bad"], prefix="- ")
 
-            st.markdown(
-                card_resumo("PRINCIPAIS ECONOMIAS", "✅", econ_rows, PALETTE["good_border"], PALETTE["good_bg"]),
-                unsafe_allow_html=True,
-            )
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-            st.markdown(
-                card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]),
-                unsafe_allow_html=True,
-            )
+                st.markdown(
+                    card_resumo("PRINCIPAIS ECONOMIAS", "✅", econ_rows, PALETTE["good_border"], PALETTE["good_bg"]),
+                    unsafe_allow_html=True,
+                )
+                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+                st.markdown(
+                    card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]),
+                    unsafe_allow_html=True,
+                )
