@@ -877,7 +877,7 @@ with tab_resumo:
             """Ordena colunas tipo 01/2026, 1/2026, JAN/2026, JAN 2026 (pt-br)."""
             s = _norm_colname(col)
 
-            m = re.search(r"\b(\d{1,2})\s*/\s*(\d{4})\b", s)  # 01/2026
+            m = re.search(r"\b(\d{1,2})\s*/\s*(\d{4})\b", s)
             if m:
                 mm = int(m.group(1))
                 yy = int(m.group(2))
@@ -908,66 +908,47 @@ with tab_resumo:
 
         fmt_func = globals().get("fmt_brl", _fmt_brl_fallback)
 
-        def _chip_class(v):
+        def _chip(v):
             try:
+                if v is None or (isinstance(v, float) and pd.isna(v)):
+                    return "<span class='chip neutral'>—</span>"
                 v = float(v)
             except Exception:
-                return "chip neutral"
+                return "<span class='chip neutral'>—</span>"
+
             if v > 0:
-                return "chip bad"   # desvio
-            if v < 0:
-                return "chip good"  # economia
-            return "chip neutral"
-
-        def _sparkline_svg(values, width=170, height=34, pad=3):
-            """
-            Sparkline dos Δ (mês atual - mês anterior).
-            Render em SVG (HTML) mais visual.
-            """
-            if values is None:
-                values = []
-
-            if len(values) < 1:
-                return "<span class='muted'>Sem Δ no período</span>"
-
-            v2 = []
-            for x in values:
-                try:
-                    if x is None or (isinstance(x, float) and pd.isna(x)):
-                        v2.append(0.0)
-                    else:
-                        v2.append(float(x))
-                except Exception:
-                    v2.append(0.0)
-
-            if len(v2) == 1:
-                v2 = [0.0, v2[0]]  # força 2 pontos pra desenhar
-
-            vmin, vmax = min(v2), max(v2)
-            if vmin == vmax:
-                vmin -= 1
-                vmax += 1
-
-            def y_of(v):
-                return pad + (vmax - v) * (height - 2 * pad) / (vmax - vmin)
-
-            n = len(v2)
-            xs = [pad + i * (width - 2 * pad) / (n - 1) for i in range(n)]
-            pts = " ".join(f"{xs[i]:.2f},{y_of(v2[i]):.2f}" for i in range(n))
-
-            # linha do zero (se estiver no range)
-            if vmin <= 0 <= vmax:
-                y0 = y_of(0.0)
-                zero_line = f"<line x1='{pad}' y1='{y0:.2f}' x2='{width-pad}' y2='{y0:.2f}' class='zero'/>"
+                cls = "chip bad"     # desvio
+            elif v < 0:
+                cls = "chip good"    # economia
             else:
-                zero_line = ""
+                cls = "chip neutral"
+            return f"<span class='{cls}'>{fmt_func(v)}</span>"
+
+        def _bar_cell(v, vmax):
+            """Celula com barra de intensidade (abs) e cor por sinal."""
+            try:
+                if v is None or (isinstance(v, float) and pd.isna(v)):
+                    return "<span class='muted'>—</span>"
+                v = float(v)
+            except Exception:
+                return "<span class='muted'>—</span>"
+
+            vmax = float(vmax) if vmax and vmax > 0 else 0.0
+            p = (abs(v) / vmax * 100.0) if vmax > 0 else 0.0
+            if p > 100:
+                p = 100.0
+
+            if v > 0:
+                cls = "pos"
+            elif v < 0:
+                cls = "neg"
+            else:
+                cls = "neu"
 
             return (
-                f"<svg width='{width}' height='{height}' viewBox='0 0 {width} {height}' preserveAspectRatio='none'>"
-                f"{zero_line}"
-                f"<polyline points='{pts}' class='spark'/>"
-                f"<circle cx='{xs[-1]:.2f}' cy='{y_of(v2[-1]):.2f}' r='2.2' class='dot'/>"
-                f"</svg>"
+                f"<div class='bar {cls}' style='--p:{p:.1f}%'>"
+                f"<span class='num'>{fmt_func(v)}</span>"
+                f"</div>"
             )
 
         # =========================
@@ -1009,9 +990,9 @@ with tab_resumo:
         # =========================
         # FILTROS (TOPO)
         # =========================
-        top1, top2, top3 = st.columns([2.3, 2.2, 1.5])
+        f1, f2, f3 = st.columns([2.5, 2.2, 1.3])
 
-        with top1:
+        with f1:
             st.markdown("#### Período")
             if not month_cols_sorted:
                 st.warning("Não encontrei colunas de mês com valores.")
@@ -1022,6 +1003,7 @@ with tab_resumo:
             else:
                 start_idx = max(0, len(month_cols_sorted) - 6)
                 default_range = (month_cols_sorted[start_idx], month_cols_sorted[-1])
+
                 periodo = st.select_slider(
                     "Selecione o período (mês inicial → mês final)",
                     options=month_cols_sorted,
@@ -1034,7 +1016,7 @@ with tab_resumo:
                     i0, i1 = i1, i0
                 sel_month_cols = month_cols_sorted[i0:i1 + 1]
 
-        with top2:
+        with f2:
             st.markdown("#### Obras")
             todas = st.toggle("Todas as obras", value=True, key="todas_obras_orc")
             obras_all = sorted([x for x in df_show["OBRA"].dropna().astype(str).tolist() if str(x).strip() != ""])
@@ -1048,36 +1030,52 @@ with tab_resumo:
             else:
                 obras_sel = obras_all
 
-        with top3:
-            st.markdown("#### Colunas")
-            mostrar_deltas_cols = st.toggle("Mostrar Δ (colunas)", value=False, key="show_deltas_cols_orc")
-            mostrar_meses_cols = st.toggle("Mostrar valores mensais", value=False, key="show_months_cols_orc")
+        with f3:
+            st.markdown("#### Visual")
+            mostrar_meses = st.toggle("Mostrar meses (colunas)", value=True, key="vis_meses_orc")
 
+        # aplica filtro de obras
         df_f = df_show[df_show["OBRA"].isin(obras_sel)].copy()
 
-        # =========================
-        # CÁLCULO: Δ mês a mês (mês atual - mês anterior)
-        # =========================
-        delta_cols = []
-        if sel_month_cols and len(sel_month_cols) >= 2:
-            for i in range(1, len(sel_month_cols)):
-                c_prev = sel_month_cols[i - 1]
-                c_curr = sel_month_cols[i]
-                c_delta = f"Δ {c_curr}"
-                df_f[c_delta] = df_f[c_curr] - df_f[c_prev]
-                delta_cols.append(c_delta)
-
-        # sparkline = sequência de deltas do período
-        if delta_cols:
-            df_f["__spark_deltas"] = df_f[delta_cols].values.tolist()
-        else:
-            df_f["__spark_deltas"] = [[] for _ in range(len(df_f))]
-
-        last_month_col = sel_month_cols[-1] if sel_month_cols else None
+        # (se o usuário desligar meses, ainda mantemos a tabela, mas com foco no último mês + var final)
+        last_month_col = sel_month_cols[-1] if (sel_month_cols and len(sel_month_cols) > 0) else None
 
         # =========================
-        # TABELA ULTRA VISUAL (HTML)
+        # CÁLCULO TOTAL (linha TOTAL) + Δ TOTAL (última linha)
         # =========================
+        total_month_vals = {}
+        delta_total_vals = {}
+
+        if sel_month_cols:
+            for mc in sel_month_cols:
+                total_month_vals[mc] = pd.to_numeric(df_f[mc], errors="coerce").sum(skipna=True)
+
+            # Δ do TOTAL (mês atual - mês anterior)
+            if len(sel_month_cols) >= 2:
+                for i in range(1, len(sel_month_cols)):
+                    prev_c = sel_month_cols[i - 1]
+                    curr_c = sel_month_cols[i]
+                    delta_total_vals[curr_c] = total_month_vals[curr_c] - total_month_vals[prev_c]
+            # para o primeiro mês, não existe delta
+            delta_total_vals[sel_month_cols[0]] = None
+
+        total_last = total_month_vals.get(last_month_col, None) if last_month_col else None
+        total_varf = None
+        if variacao_col and variacao_col in df_f.columns:
+            total_varf = pd.to_numeric(df_f[variacao_col], errors="coerce").sum(skipna=True)
+
+        # =========================
+        # TABELA HTML (mais BI)
+        # =========================
+        # max por coluna pra barra (considera também o TOTAL)
+        col_vmax = {}
+        if sel_month_cols:
+            for mc in sel_month_cols:
+                mx = pd.to_numeric(df_f[mc], errors="coerce").abs().max()
+                tv = abs(float(total_month_vals.get(mc, 0) or 0))
+                mx = max(float(mx) if pd.notna(mx) else 0.0, tv)
+                col_vmax[mc] = mx
+
         css = r'''
 <style>
   .orc-wrap{border:1px solid rgba(148,163,184,.35); border-radius:14px; overflow:hidden;}
@@ -1095,86 +1093,158 @@ with tab_resumo:
     background:rgba(255,255,255,.70);
   }
   .orc-table tbody tr:hover td{ background:rgba(226,232,240,.65); }
+
   .obra{font-weight:800; max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .spark{ fill:none; stroke:rgba(15,23,42,.72); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-  .zero{ stroke:rgba(148,163,184,.65); stroke-width:1; stroke-dasharray:3 3; }
-  .dot{ fill:rgba(15,23,42,.72); }
-  .chip{ display:inline-block; padding:5px 9px; border-radius:999px; font-weight:900; font-size:12px; }
-  .chip.good{ background:rgba(34,197,94,.16); color:rgb(22,101,52); border:1px solid rgba(34,197,94,.35); }
-  .chip.bad{ background:rgba(239,68,68,.14); color:rgb(153,27,27); border:1px solid rgba(239,68,68,.35); }
-  .chip.neutral{ background:rgba(148,163,184,.18); color:rgb(51,65,85); border:1px solid rgba(148,163,184,.35); }
   .muted{ color:rgb(71,85,105); font-size:12px; white-space:nowrap; }
   .num{ white-space:nowrap; font-variant-numeric: tabular-nums; }
   .right{ text-align:right; }
   .scroll{ max-height:560px; overflow:auto; }
-  .hdrsub{ display:block; font-size:11px; color:rgba(226,232,240,.75); font-weight:600; margin-top:2px;}
+
+  /* barra dentro da célula */
+  .bar{ position:relative; padding:6px 8px; border-radius:10px; overflow:hidden; }
+  .bar::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:var(--p);
+    opacity:.9;
+  }
+  .bar.pos::before{ background:rgba(239,68,68,.22); } /* desvio */
+  .bar.neg::before{ background:rgba(34,197,94,.22); } /* economia */
+  .bar.neu::before{ background:rgba(148,163,184,.22); }
+  .bar span{ position:relative; z-index:1; font-weight:800; }
+
+  /* chips variação final */
+  .chip{ display:inline-block; padding:6px 10px; border-radius:999px; font-weight:900; font-size:12px; }
+  .chip.good{ background:rgba(34,197,94,.16); color:rgb(22,101,52); border:1px solid rgba(34,197,94,.35); }
+  .chip.bad{ background:rgba(239,68,68,.14); color:rgb(153,27,27); border:1px solid rgba(239,68,68,.35); }
+  .chip.neutral{ background:rgba(148,163,184,.18); color:rgb(51,65,85); border:1px solid rgba(148,163,184,.35); }
+
+  /* rodapé */
+  .row-total td{
+    background:rgba(15,23,42,.06) !important;
+    font-weight:900;
+  }
+  .row-delta td{
+    background:rgba(15,23,42,.10) !important;
+    font-weight:900;
+  }
 </style>
 '''
 
-        # cabeçalhos dinâmicos
-        hdr_delta = "Variação mês a mês (Δ)"
-        if sel_month_cols and len(sel_month_cols) >= 2:
-            hdr_periodo = f"{sel_month_cols[1]} → {sel_month_cols[-1]}"
-        elif sel_month_cols:
-            hdr_periodo = f"{sel_month_cols[0]}"
-        else:
-            hdr_periodo = "—"
-
+        # cabeçalho
         html = [css, "<div class='orc-wrap'><div class='scroll'><table class='orc-table'>"]
         html.append("<thead><tr>")
         html.append("<th>OBRA</th>")
-        html.append(f"<th>{hdr_delta}<span class='hdrsub'>{hdr_periodo}</span></th>")
 
-        if mostrar_deltas_cols and delta_cols:
-            for dc in delta_cols:
-                html.append(f"<th class='right'>{dc}</th>")
-
-        if mostrar_meses_cols and sel_month_cols:
+        if mostrar_meses and sel_month_cols:
             for mc in sel_month_cols:
                 html.append(f"<th class='right'>{mc}</th>")
-
-        if last_month_col:
-            html.append(f"<th class='right'>Último mês<span class='hdrsub'>{last_month_col}</span></th>")
+        else:
+            # modo compacto: só último mês
+            if last_month_col:
+                html.append(f"<th class='right'>Último mês<br/><span style='font-weight:600;opacity:.8'>{last_month_col}</span></th>")
 
         if variacao_col:
-            html.append(f"<th class='right'>Variação final<span class='hdrsub'>{variacao_col}</span></th>")
+            html.append(f"<th class='right'>Variação final<br/><span style='font-weight:600;opacity:.8'>{variacao_col}</span></th>")
 
         html.append("</tr></thead><tbody>")
 
-        for i, r in df_f.reset_index(drop=True).iterrows():
+        # linhas por obra
+        df_rows = df_f.copy()
+        # opcional: ordenar por impacto da variação final
+        if variacao_col and variacao_col in df_rows.columns:
+            df_rows["__abs"] = pd.to_numeric(df_rows[variacao_col], errors="coerce").abs()
+            df_rows = df_rows.sort_values("__abs", ascending=False).drop(columns=["__abs"])
+
+        for _, r in df_rows.iterrows():
             obra = str(r.get("OBRA", "")).strip()
-
-            deltas = r.get("__spark_deltas", [])
-            spark = _sparkline_svg(deltas) if isinstance(deltas, list) and len(deltas) > 0 else "<span class='muted'>Sem Δ no período</span>"
-
-            lastv = r.get(last_month_col, None) if last_month_col else None
-            varf = r.get(variacao_col, None) if variacao_col else None
-            chip = f"<span class='{_chip_class(varf)} num'>{fmt_func(varf)}</span>" if variacao_col else "—"
 
             html.append("<tr>")
             html.append(f"<td class='obra'>{obra}</td>")
-            html.append(f"<td>{spark}</td>")
 
-            if mostrar_deltas_cols and delta_cols:
-                for dc in delta_cols:
-                    html.append(f"<td class='right num'>{fmt_func(r.get(dc, None))}</td>")
-
-            if mostrar_meses_cols and sel_month_cols:
+            if mostrar_meses and sel_month_cols:
                 for mc in sel_month_cols:
-                    html.append(f"<td class='right num'>{fmt_func(r.get(mc, None))}</td>")
-
-            if last_month_col:
-                html.append(f"<td class='right num'>{fmt_func(lastv)}</td>")
+                    v = r.get(mc, None)
+                    html.append(f"<td class='right'>{_bar_cell(v, col_vmax.get(mc, 0.0))}</td>")
+            else:
+                if last_month_col:
+                    html.append(f"<td class='right'><span class='num'>{fmt_func(r.get(last_month_col, None))}</span></td>")
 
             if variacao_col:
-                html.append(f"<td class='right'>{chip}</td>")
+                html.append(f"<td class='right'>{_chip(r.get(variacao_col, None))}</td>")
 
             html.append("</tr>")
 
+        # ====== LINHA TOTAL (penúltima) ======
+        html.append("<tr class='row-total'>")
+        html.append("<td class='obra'>TOTAL (obras filtradas)</td>")
+
+        if mostrar_meses and sel_month_cols:
+            for mc in sel_month_cols:
+                html.append(f"<td class='right'>{_bar_cell(total_month_vals.get(mc, None), col_vmax.get(mc, 0.0))}</td>")
+        else:
+            if last_month_col:
+                html.append(f"<td class='right'><span class='num'>{fmt_func(total_last)}</span></td>")
+
+        if variacao_col:
+            html.append(f"<td class='right'>{_chip(total_varf)}</td>")
+
+        html.append("</tr>")
+
+        # ====== LINHA Δ TOTAL (ÚLTIMA LINHA) ======
+        html.append("<tr class='row-delta'>")
+        html.append("<td class='obra'>Δ TOTAL (mês a mês)</td>")
+
+        if mostrar_meses and sel_month_cols:
+            for mc in sel_month_cols:
+                dv = delta_total_vals.get(mc, None)
+                # aqui a barra é baseada no máximo das deltas no período (pra ficar coerente)
+                # calcula vmax_delta uma vez:
+            # (vamos calcular vmax_delta fora do loop pra evitar repetição)
+        else:
+            # modo compacto: mostra o delta do último mês (se existir)
+            pass
+
+        html.append("</tr>")
+
+        # Fechar tabela primeiro pra poder reabrir? Não: vamos "reconstruir" a linha Δ com vmax_delta calculado.
+        # Então removemos a linha Δ que acabamos de montar e vamos montar corretamente:
+        html = html[:-1]  # remove "</tr>"
+        html = html[:-1]  # remove "<tr class='row-delta'>"
+
+        # calcula vmax_delta
+        vmax_delta = 0.0
+        if sel_month_cols and len(sel_month_cols) >= 2:
+            for i in range(1, len(sel_month_cols)):
+                mc = sel_month_cols[i]
+                dv = delta_total_vals.get(mc, 0.0) or 0.0
+                vmax_delta = max(vmax_delta, abs(float(dv)))
+        # monta linha Δ de verdade
+        html.append("<tr class='row-delta'>")
+        html.append("<td class='obra'>Δ TOTAL (mês a mês)</td>")
+
+        if mostrar_meses and sel_month_cols:
+            for mc in sel_month_cols:
+                dv = delta_total_vals.get(mc, None)
+                html.append(f"<td class='right'>{_bar_cell(dv, vmax_delta)}</td>")
+        else:
+            if last_month_col and sel_month_cols and len(sel_month_cols) >= 2:
+                dv_last = delta_total_vals.get(last_month_col, None)
+                html.append(f"<td class='right'><span class='num'>{fmt_func(dv_last)}</span></td>")
+            elif last_month_col:
+                html.append("<td class='right'><span class='muted'>—</span></td>")
+
+        if variacao_col:
+            # mantém a variação final do TOTAL na última linha também (pra bater o olho)
+            html.append(f"<td class='right'>{_chip(total_varf)}</td>")
+
+        html.append("</tr>")
+
         html.append("</tbody></table></div></div>")
 
-        st.markdown("#### Visão geral (mais visual)")
-        st.caption("Δ = mês atual − mês anterior. A **Variação final** permanece conforme a planilha.")
+        st.markdown("#### Visão geral (TOTAL + Δ TOTAL no rodapé)")
+        st.caption("A última linha é **Δ TOTAL**: mês atual − mês anterior, do **TOTAL das obras filtradas**.")
         st.markdown("".join(html), unsafe_allow_html=True)
 
         st.markdown("---")
