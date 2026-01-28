@@ -850,9 +850,8 @@ if debug:
     st.write("Obras:", obras)
     st.write("df_idx.head():", df_idx.head() if df_idx is not None else None)
 
-
 # =========================
-# ABA: RESUMO (ORÇAMENTO_RESUMO) — CLEAN + TOTAL + Δ TOTAL (última linha)
+# ABA: RESUMO (ORÇAMENTO_RESUMO) — TRANSPARENTE + CLEAN + TOTAL + Δ TOTAL (última linha)
 # =========================
 with tab_resumo:
     st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
@@ -863,7 +862,7 @@ with tab_resumo:
         import re
         import unicodedata
         import pandas as pd
-        import html  # ✅ NÃO sobrescrever isso com variável "html" (build_rows usa html.escape)
+        import html  # ✅ NÃO sobrescreva isso com variável "html" (build_rows usa html.escape)
 
         df_show = df_orc_resumo.copy()
 
@@ -913,9 +912,9 @@ with tab_resumo:
 
         fmt_func = globals().get("fmt_brl", _fmt_brl_fallback)
 
-        # pills (clean)
+        # pills (transparent-friendly)
         def _pill_value(v):
-            """Valor mensal (SEM cor)."""
+            """Valor mensal (SEM cor de status)."""
             try:
                 if v is None or (isinstance(v, float) and pd.isna(v)):
                     return "<span class='pill neutral'>—</span>"
@@ -1054,51 +1053,66 @@ with tab_resumo:
             total_varf = pd.to_numeric(df_f[variacao_col], errors="coerce").sum(skipna=True)
 
         # =========================
-        # TABELA HTML — CLEAN (sem cinza / sem pintar orçamento)
-        # - Valores mensais: neutro
-        # - Variação final: + vermelho / - verde
-        # - Linha Δ TOTAL (última): + vermelho / - verde
+        # TABELA HTML — TRANSPARENTE
+        # ⚠️ IMPORTANTE: nada de "opacity" no container, senão o texto fica transparente também.
         # =========================
         css = r'''
 <style>
+  :root{
+    --txt: rgba(226,232,240,0.96);          /* texto principal (não transparente) */
+    --txt-muted: rgba(226,232,240,0.70);
+    --border: rgba(148,163,184,0.20);
+    --glass: rgba(2,6,23,0.18);             /* “vidro” leve */
+    --glass-strong: rgba(2,6,23,0.40);      /* header */
+  }
+
   .orc-wrap{
-    border:1px solid rgba(226,232,240,1);
+    border:1px solid var(--border);
     border-radius:14px;
     overflow:hidden;
-    background:#ffffff;
+    background: transparent;                /* ✅ transparente */
   }
-  .scroll{ max-height:560px; overflow:auto; background:#ffffff; }
+
+  .scroll{
+    max-height:560px;
+    overflow:auto;
+    background: transparent;                /* ✅ transparente */
+  }
 
   .orc-table{
     width:100%;
     border-collapse:separate;
     border-spacing:0;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
-    background:#17181f;
+    background: transparent;                /* ✅ transparente */
   }
 
   .orc-table thead th{
-    position:sticky; top:0; z-index:4;
-    background:#ffffff;
-    color:#0f172a;
+    position:sticky; top:0; z-index:6;
+    background: var(--glass-strong);        /* semi-transparente p/ leitura */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--txt);                      /* ✅ texto sólido */
     text-align:left;
     font-size:12px;
     letter-spacing:.02em;
     padding:12px 12px;
-    border-bottom:1px solid rgba(226,232,240,1);
+    border-bottom:1px solid var(--border);
     white-space:nowrap;
   }
 
   .orc-table tbody td{
     padding:12px 12px;
-    border-bottom:1px solid rgba(226,232,240,1);
+    border-bottom:1px solid var(--border);
     vertical-align:middle;
     font-size:13px;
-    color:#0f172a;
-    background:#ffffff;
+    color: var(--txt);                      /* ✅ texto sólido */
+    background: var(--glass);               /* transparente, mas legível */
   }
 
-  .orc-table tbody tr:hover td{ background: rgba(248,250,252,1); }
+  .orc-table tbody tr:hover td{
+    background: rgba(2,6,23,0.26);
+  }
 
   .obra{
     font-weight:800;
@@ -1111,45 +1125,54 @@ with tab_resumo:
   .right{ text-align:right; }
   .num{ white-space:nowrap; font-variant-numeric: tabular-nums; }
 
-  /* Pills */
+  /* Pills: valores mensais neutros (sem vermelho), variações coloridas */
   .pill{
     display:inline-block;
     padding:7px 10px;
     border-radius:999px;
-    font-weight:800;
+    font-weight:850;
     font-size:12px;
-    border:1px solid rgba(226,232,240,1);
-    background:#ffffff;
+    border:1px solid var(--border);
+    background: rgba(15,23,42,0.22);
+    color: var(--txt);                      /* ✅ texto sólido */
   }
-  .pill.neutral{ color:#0f172a; }
+  .pill.neutral{ color: var(--txt); }
   .pill.good{
     border:1px solid rgba(34,197,94,.35);
-    background: rgba(34,197,94,.10);
-    color: rgb(22,101,52);
+    background: rgba(34,197,94,.14);
+    color: rgba(187,247,208,0.98);
   }
   .pill.bad{
     border:1px solid rgba(239,68,68,.35);
-    background: rgba(239,68,68,.10);
-    color: rgb(153,27,27);
+    background: rgba(239,68,68,.14);
+    color: rgba(254,202,202,0.98);
   }
 
-  /* Rodapé */
+  /* Rodapé (sem cinza sólido; só reforço) */
   .row-total td{
-    background: rgba(248,250,252,1) !important;
-    font-weight:900;
+    background: rgba(2,6,23,0.30) !important;
+    font-weight:950;
+    border-top:1px solid var(--border);
   }
   .row-delta td{
-    background: rgba(241,245,249,1) !important;
-    font-weight:900;
+    background: rgba(2,6,23,0.38) !important;
+    font-weight:950;
+    border-top:1px solid var(--border);
   }
 
-  /* Primeira coluna sticky */
-  .orc-table thead th:first-child,
+  /* Primeira coluna sticky (precisa de fundo pra não “vazar” sobre as outras) */
+  .orc-table thead th:first-child{
+    position:sticky; left:0; z-index:7;
+    background: var(--glass-strong);
+    border-right:1px solid var(--border);
+  }
   .orc-table tbody td:first-child{
     position:sticky; left:0; z-index:5;
-    background:inherit;
-    border-right:1px solid rgba(226,232,240,1);
+    background: rgba(2,6,23,0.32);
+    border-right:1px solid var(--border);
   }
+
+  .muted{ color: var(--txt-muted); }
 </style>
 '''
 
@@ -1208,7 +1231,6 @@ with tab_resumo:
 
         if variacao_col:
             html_parts.append(f"<td class='right num'>{_pill_var(total_varf)}</td>")
-
         html_parts.append("</tr>")
 
         # ===== Linha Δ TOTAL (ÚLTIMA) =====
@@ -1218,7 +1240,6 @@ with tab_resumo:
         if mostrar_meses and sel_month_cols:
             for mc in sel_month_cols:
                 dv = delta_total_vals.get(mc, None)
-                # mesma lógica de cor (+ vermelho, - verde)
                 html_parts.append(f"<td class='right num'>{_pill_var(dv)}</td>")
         else:
             if last_month_col:
@@ -1226,15 +1247,15 @@ with tab_resumo:
                 html_parts.append(f"<td class='right num'>{_pill_var(dv_last)}</td>")
 
         if variacao_col:
-            # opcional: repetir a var final do total aqui pra leitura
+            # repetir var final do total aqui ajuda leitura
             html_parts.append(f"<td class='right num'>{_pill_var(total_varf)}</td>")
 
         html_parts.append("</tr>")
 
         html_parts.append("</tbody></table></div></div>")
 
-        st.markdown("#### Visão geral (clean)")
-        st.caption("Valores mensais **sem cor**. Variações: **positivo = vermelho**, **negativo = verde**. A última linha é o **Δ TOTAL**.")
+        st.markdown("#### Visão geral (transparente)")
+        st.caption("Valores mensais neutros. Variações: **positivo = vermelho**, **negativo = verde**. Última linha = **Δ TOTAL**.")
         st.markdown("".join(html_parts), unsafe_allow_html=True)
 
         st.markdown("---")
