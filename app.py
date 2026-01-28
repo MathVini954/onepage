@@ -1119,7 +1119,7 @@ with tab_resumo:
     font-weight:800;
     font-size:12px;
     border:1px solid rgba(226,232,240,1);
-    background:#ffffff;
+    background:#17181f;
   }
   .pill.neutral{ color:#0f172a; }
   .pill.good{
