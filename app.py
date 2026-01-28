@@ -138,34 +138,40 @@ PLOTLY_TEMPLATE = PALETTE["plotly_template"]
 
 # CSS
 st.markdown(
-    f"""
+    """
 <style>
   html, body, [data-testid="stAppViewContainer"], .stApp {{
-    background: {PALETTE["bg"]} !important;
+    background: {bg} !important;
   }}
+
   header[data-testid="stHeader"] {{
-    background: {PALETTE["bg"]} !important;
-    border-bottom: 1px solid {PALETTE["border"]} !important;
+    background: {bg} !important;
+    border-bottom: 1px solid {border} !important;
   }}
+
   section[data-testid="stSidebar"] {{
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
   }}
+
   section[data-testid="stSidebar"] > div {{
-    background: {PALETTE["sidebar_bg"]} !important;
-    border-right: 1px solid {PALETTE["border"]} !important;
+    background: {sidebar_bg} !important;
+    border-right: 1px solid {border} !important;
   }}
+
   [data-testid="collapsedControl"] {{
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
   }}
+
   .block-container {{
     padding-top: 1.25rem;
     padding-bottom: 2rem;
   }}
-  @media (max-width: 900px){
+
+  @media (max-width: 900px) {{
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
     h1 {{ font-size: 1.6rem !important; }}
     h2 {{ font-size: 1.25rem !important; }}
@@ -173,9 +179,14 @@ st.markdown(
     [data-testid="stSidebar"] {{ width: 85vw !important; }}
   }}
 </style>
-""",
+""".format(
+        bg=PALETTE["bg"],
+        border=PALETTE["border"],
+        sidebar_bg=PALETTE["sidebar_bg"],
+    ),
     unsafe_allow_html=True,
 )
+
 
 
 def apply_plotly_theme(fig: go.Figure) -> go.Figure:
@@ -237,7 +248,7 @@ def pct(v_ratio: float | None) -> str:
 
 def kpi_card_money(label: str, value: float | None):
     st.markdown(
-        f"""
+        """
 <div style="border:1px solid {PALETTE["border"]}; border-radius:14px; padding:12px 14px; background:{PALETTE["card"]}; height:92px;">
   <div style="font-size:12px; color:{PALETTE["muted"]}; margin-bottom:6px;">{html.escape(label)}</div>
   <div style="font-size:24px; font-weight:900; line-height:1.05; color:{PALETTE["text"]};">{html.escape(brl_compact(value))}</div>
@@ -250,7 +261,7 @@ def kpi_card_money(label: str, value: float | None):
 
 def kpi_card_money_highlight(label: str, value: float | None, value_color: str, subtitle: str = ""):
     st.markdown(
-        f"""
+        """
 <div style="border:1px solid {PALETTE["border"]}; border-radius:14px; padding:12px 14px; background:{PALETTE["card"]}; height:92px;">
   <div style="font-size:12px; color:{PALETTE["muted"]}; margin-bottom:6px;">{html.escape(label)}</div>
   <div style="font-size:24px; font-weight:900; line-height:1.05; color:{value_color};">{html.escape(brl_compact(value))}</div>
@@ -288,7 +299,7 @@ def kpi_card_index(label: str, idx: float | None, month_label: str):
             color = PALETTE["text"]
 
     st.markdown(
-        f"""
+        """
 <div style="border:1px solid {PALETTE["border"]}; border-radius:14px; padding:12px 14px; background:{PALETTE["card"]}; height:92px;">
   <div style="font-size:12px; color:{PALETTE["muted"]}; margin-bottom:6px;">{html.escape(label)}</div>
   <div style="font-size:24px; font-weight:900; line-height:1.05; color:{color};">{html.escape(val)}</div>
@@ -751,7 +762,7 @@ with tab_just:
 
     def list_just(df: pd.DataFrame, title: str, color: str, topk: int = 5):
         st.markdown(
-            f"""
+            """
 <div style="border:1px solid {PALETTE["border"]}; background:{PALETTE["card"]}; border-radius:16px; padding:14px 16px;">
   <div style="font-size:12px; color:{PALETTE["muted"]}; font-weight:900; margin-bottom:10px;">{html.escape(title)}</div>
 """,
@@ -759,7 +770,7 @@ with tab_just:
         )
 
         if df is None or df.empty:
-            st.markdown(f"<div style='color:{PALETTE['muted']}; font-size:12px;'>Sem dados</div></div>", unsafe_allow_html=True)
+            st.markdown("<div style='color:{PALETTE['muted']}; font-size:12px;'>Sem dados</div></div>", unsafe_allow_html=True)
             return
 
         tempj = df.copy()
@@ -773,7 +784,7 @@ with tab_just:
             just = str(r.get("JUSTIFICATIVAS", "") or "").strip() or "—"
 
             st.markdown(
-                f"""
+                """
 <div style="padding:10px 0; border-top:1px solid {PALETTE["border"]};">
   <div style="display:flex; justify-content:space-between; align-items:center;">
     <div style="font-size:13px; font-weight:800; color:{PALETTE["text"]};">{html.escape(desc)}</div>
