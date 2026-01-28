@@ -851,7 +851,9 @@ if debug:
     st.write("df_idx.head():", df_idx.head() if df_idx is not None else None)
 
 
-# === ABA: RESUMO (ORÇAMENTO_RESUMO) ===
+# =========================
+# ABA: RESUMO (ORÇAMENTO_RESUMO) — CLEAN + TOTAL + Δ TOTAL (última linha)
+# =========================
 with tab_resumo:
     st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
 
@@ -861,6 +863,7 @@ with tab_resumo:
         import re
         import unicodedata
         import pandas as pd
+        import html  # ✅ NÃO sobrescrever isso com variável "html" (build_rows usa html.escape)
 
         df_show = df_orc_resumo.copy()
 
@@ -874,9 +877,10 @@ with tab_resumo:
             return " ".join(s.upper().split())
 
         def _month_sort_key(col):
-            """Ordena colunas tipo 01/2026, 1/2026, JAN/2026, JAN 2026 (pt-br)."""
+            """Ordena colunas tipo out/2025, 01/2026, JAN/2026, etc."""
             s = _norm_colname(col)
 
+            # 01/2026
             m = re.search(r"\b(\d{1,2})\s*/\s*(\d{4})\b", s)
             if m:
                 mm = int(m.group(1))
@@ -884,6 +888,7 @@ with tab_resumo:
                 if 1 <= mm <= 12:
                     return pd.Timestamp(yy, mm, 1)
 
+            # OUT/2025 etc (pt-br)
             pt = {"JAN":1,"FEV":2,"MAR":3,"ABR":4,"MAI":5,"JUN":6,"JUL":7,"AGO":8,"SET":9,"OUT":10,"NOV":11,"DEZ":12}
             m2 = re.search(r"\b(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\b", s)
             y2 = re.search(r"\b(20\d{2})\b", s)
@@ -894,7 +899,7 @@ with tab_resumo:
 
             return pd.Timestamp(2999, 12, 1)
 
-        # fallback caso fmt_brl não exista no seu código
+        # fallback caso fmt_brl não exista no seu app
         def _fmt_brl_fallback(v):
             try:
                 if pd.isna(v):
@@ -908,48 +913,30 @@ with tab_resumo:
 
         fmt_func = globals().get("fmt_brl", _fmt_brl_fallback)
 
-        def _chip(v):
+        # pills (clean)
+        def _pill_value(v):
+            """Valor mensal (SEM cor)."""
             try:
                 if v is None or (isinstance(v, float) and pd.isna(v)):
-                    return "<span class='chip neutral'>—</span>"
-                v = float(v)
+                    return "<span class='pill neutral'>—</span>"
+                return f"<span class='pill neutral'>{fmt_func(v)}</span>"
             except Exception:
-                return "<span class='chip neutral'>—</span>"
+                return "<span class='pill neutral'>—</span>"
 
-            if v > 0:
-                cls = "chip bad"     # desvio
-            elif v < 0:
-                cls = "chip good"    # economia
-            else:
-                cls = "chip neutral"
-            return f"<span class='{cls}'>{fmt_func(v)}</span>"
-
-        def _bar_cell(v, vmax):
-            """Celula com barra de intensidade (abs) e cor por sinal."""
+        def _pill_var(v):
+            """Variações (com cor): + vermelho, - verde."""
             try:
                 if v is None or (isinstance(v, float) and pd.isna(v)):
-                    return "<span class='muted'>—</span>"
+                    return "<span class='pill neutral'>—</span>"
                 v = float(v)
             except Exception:
-                return "<span class='muted'>—</span>"
-
-            vmax = float(vmax) if vmax and vmax > 0 else 0.0
-            p = (abs(v) / vmax * 100.0) if vmax > 0 else 0.0
-            if p > 100:
-                p = 100.0
+                return "<span class='pill neutral'>—</span>"
 
             if v > 0:
-                cls = "pos"
-            elif v < 0:
-                cls = "neg"
-            else:
-                cls = "neu"
-
-            return (
-                f"<div class='bar {cls}' style='--p:{p:.1f}%'>"
-                f"<span class='num'>{fmt_func(v)}</span>"
-                f"</div>"
-            )
+                return f"<span class='pill bad'>{fmt_func(v)}</span>"
+            if v < 0:
+                return f"<span class='pill good'>{fmt_func(v)}</span>"
+            return f"<span class='pill neutral'>{fmt_func(v)}</span>"
 
         # =========================
         # Validações / Detecção colunas
@@ -977,7 +964,7 @@ with tab_resumo:
                 continue
             month_cols.append(c)
 
-        # converte meses + variação final pra número
+        # converter meses + variação final pra número
         for c in month_cols + ([variacao_col] if variacao_col else []):
             if c is None:
                 continue
@@ -990,7 +977,7 @@ with tab_resumo:
         # =========================
         # FILTROS (TOPO)
         # =========================
-        f1, f2, f3 = st.columns([2.5, 2.2, 1.3])
+        f1, f2, f3 = st.columns([2.6, 2.2, 1.6])
 
         with f1:
             st.markdown("#### Período")
@@ -1003,7 +990,6 @@ with tab_resumo:
             else:
                 start_idx = max(0, len(month_cols_sorted) - 6)
                 default_range = (month_cols_sorted[start_idx], month_cols_sorted[-1])
-
                 periodo = st.select_slider(
                     "Selecione o período (mês inicial → mês final)",
                     options=month_cols_sorted,
@@ -1032,16 +1018,16 @@ with tab_resumo:
 
         with f3:
             st.markdown("#### Visual")
-            mostrar_meses = st.toggle("Mostrar meses (colunas)", value=True, key="vis_meses_orc")
+            mostrar_meses = st.toggle("Mostrar meses (colunas)", value=True, key="mostrar_meses_orc")
 
         # aplica filtro de obras
         df_f = df_show[df_show["OBRA"].isin(obras_sel)].copy()
 
-        # (se o usuário desligar meses, ainda mantemos a tabela, mas com foco no último mês + var final)
+        # último mês do período selecionado
         last_month_col = sel_month_cols[-1] if (sel_month_cols and len(sel_month_cols) > 0) else None
 
         # =========================
-        # CÁLCULO TOTAL (linha TOTAL) + Δ TOTAL (última linha)
+        # TOTAL e Δ TOTAL (recalcula conforme filtro)
         # =========================
         total_month_vals = {}
         delta_total_vals = {}
@@ -1050,109 +1036,143 @@ with tab_resumo:
             for mc in sel_month_cols:
                 total_month_vals[mc] = pd.to_numeric(df_f[mc], errors="coerce").sum(skipna=True)
 
-            # Δ do TOTAL (mês atual - mês anterior)
+            # delta do TOTAL
             if len(sel_month_cols) >= 2:
+                delta_total_vals[sel_month_cols[0]] = None
                 for i in range(1, len(sel_month_cols)):
                     prev_c = sel_month_cols[i - 1]
                     curr_c = sel_month_cols[i]
                     delta_total_vals[curr_c] = total_month_vals[curr_c] - total_month_vals[prev_c]
-            # para o primeiro mês, não existe delta
-            delta_total_vals[sel_month_cols[0]] = None
+            else:
+                delta_total_vals[sel_month_cols[0]] = None
 
         total_last = total_month_vals.get(last_month_col, None) if last_month_col else None
+
+        # variação final do TOTAL = soma das variações finais (mantém lógica da planilha)
         total_varf = None
         if variacao_col and variacao_col in df_f.columns:
             total_varf = pd.to_numeric(df_f[variacao_col], errors="coerce").sum(skipna=True)
 
         # =========================
-        # TABELA HTML (mais BI)
+        # TABELA HTML — CLEAN (sem cinza / sem pintar orçamento)
+        # - Valores mensais: neutro
+        # - Variação final: + vermelho / - verde
+        # - Linha Δ TOTAL (última): + vermelho / - verde
         # =========================
-        # max por coluna pra barra (considera também o TOTAL)
-        col_vmax = {}
-        if sel_month_cols:
-            for mc in sel_month_cols:
-                mx = pd.to_numeric(df_f[mc], errors="coerce").abs().max()
-                tv = abs(float(total_month_vals.get(mc, 0) or 0))
-                mx = max(float(mx) if pd.notna(mx) else 0.0, tv)
-                col_vmax[mc] = mx
-
         css = r'''
 <style>
-  .orc-wrap{border:1px solid rgba(148,163,184,.35); border-radius:14px; overflow:hidden;}
-  .orc-table{width:100%; border-collapse:separate; border-spacing:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;}
+  .orc-wrap{
+    border:1px solid rgba(226,232,240,1);
+    border-radius:14px;
+    overflow:hidden;
+    background:#ffffff;
+  }
+  .scroll{ max-height:560px; overflow:auto; background:#ffffff; }
+
+  .orc-table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
+    background:#ffffff;
+  }
+
   .orc-table thead th{
-    position:sticky; top:0; z-index:2;
-    background:rgba(15,23,42,.92);
-    color:#e2e8f0; text-align:left; font-size:12px; letter-spacing:.02em;
-    padding:10px 10px; border-bottom:1px solid rgba(148,163,184,.25);
+    position:sticky; top:0; z-index:4;
+    background:#ffffff;
+    color:#0f172a;
+    text-align:left;
+    font-size:12px;
+    letter-spacing:.02em;
+    padding:12px 12px;
+    border-bottom:1px solid rgba(226,232,240,1);
     white-space:nowrap;
   }
+
   .orc-table tbody td{
-    padding:10px 10px; border-bottom:1px solid rgba(148,163,184,.18);
-    vertical-align:middle; font-size:13px; color:#0f172a;
-    background:rgba(255,255,255,.70);
+    padding:12px 12px;
+    border-bottom:1px solid rgba(226,232,240,1);
+    vertical-align:middle;
+    font-size:13px;
+    color:#0f172a;
+    background:#ffffff;
   }
-  .orc-table tbody tr:hover td{ background:rgba(226,232,240,.65); }
 
-  .obra{font-weight:800; max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .muted{ color:rgb(71,85,105); font-size:12px; white-space:nowrap; }
-  .num{ white-space:nowrap; font-variant-numeric: tabular-nums; }
+  .orc-table tbody tr:hover td{ background: rgba(248,250,252,1); }
+
+  .obra{
+    font-weight:800;
+    max-width:360px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
   .right{ text-align:right; }
-  .scroll{ max-height:560px; overflow:auto; }
+  .num{ white-space:nowrap; font-variant-numeric: tabular-nums; }
 
-  /* barra dentro da célula */
-  .bar{ position:relative; padding:6px 8px; border-radius:10px; overflow:hidden; }
-  .bar::before{
-    content:"";
-    position:absolute;
-    left:0; top:0; bottom:0;
-    width:var(--p);
-    opacity:.9;
+  /* Pills */
+  .pill{
+    display:inline-block;
+    padding:7px 10px;
+    border-radius:999px;
+    font-weight:800;
+    font-size:12px;
+    border:1px solid rgba(226,232,240,1);
+    background:#ffffff;
   }
-  .bar.pos::before{ background:rgba(239,68,68,.22); } /* desvio */
-  .bar.neg::before{ background:rgba(34,197,94,.22); } /* economia */
-  .bar.neu::before{ background:rgba(148,163,184,.22); }
-  .bar span{ position:relative; z-index:1; font-weight:800; }
+  .pill.neutral{ color:#0f172a; }
+  .pill.good{
+    border:1px solid rgba(34,197,94,.35);
+    background: rgba(34,197,94,.10);
+    color: rgb(22,101,52);
+  }
+  .pill.bad{
+    border:1px solid rgba(239,68,68,.35);
+    background: rgba(239,68,68,.10);
+    color: rgb(153,27,27);
+  }
 
-  /* chips variação final */
-  .chip{ display:inline-block; padding:6px 10px; border-radius:999px; font-weight:900; font-size:12px; }
-  .chip.good{ background:rgba(34,197,94,.16); color:rgb(22,101,52); border:1px solid rgba(34,197,94,.35); }
-  .chip.bad{ background:rgba(239,68,68,.14); color:rgb(153,27,27); border:1px solid rgba(239,68,68,.35); }
-  .chip.neutral{ background:rgba(148,163,184,.18); color:rgb(51,65,85); border:1px solid rgba(148,163,184,.35); }
-
-  /* rodapé */
+  /* Rodapé */
   .row-total td{
-    background:rgba(15,23,42,.06) !important;
+    background: rgba(248,250,252,1) !important;
     font-weight:900;
   }
   .row-delta td{
-    background:rgba(15,23,42,.10) !important;
+    background: rgba(241,245,249,1) !important;
     font-weight:900;
+  }
+
+  /* Primeira coluna sticky */
+  .orc-table thead th:first-child,
+  .orc-table tbody td:first-child{
+    position:sticky; left:0; z-index:5;
+    background:inherit;
+    border-right:1px solid rgba(226,232,240,1);
   }
 </style>
 '''
 
-        # cabeçalho
-        html = [css, "<div class='orc-wrap'><div class='scroll'><table class='orc-table'>"]
-        html.append("<thead><tr>")
-        html.append("<th>OBRA</th>")
+        html_parts = [css, "<div class='orc-wrap'><div class='scroll'><table class='orc-table'>"]
+
+        # Cabeçalho
+        html_parts.append("<thead><tr>")
+        html_parts.append("<th>OBRA</th>")
 
         if mostrar_meses and sel_month_cols:
             for mc in sel_month_cols:
-                html.append(f"<th class='right'>{mc}</th>")
+                html_parts.append(f"<th class='right'>{mc}</th>")
         else:
-            # modo compacto: só último mês
             if last_month_col:
-                html.append(f"<th class='right'>Último mês<br/><span style='font-weight:600;opacity:.8'>{last_month_col}</span></th>")
+                html_parts.append("<th class='right'>Último mês</th>")
 
         if variacao_col:
-            html.append(f"<th class='right'>Variação final<br/><span style='font-weight:600;opacity:.8'>{variacao_col}</span></th>")
+            html_parts.append("<th class='right'>Variação final</th>")
 
-        html.append("</tr></thead><tbody>")
+        html_parts.append("</tr></thead><tbody>")
 
         # linhas por obra
         df_rows = df_f.copy()
-        # opcional: ordenar por impacto da variação final
         if variacao_col and variacao_col in df_rows.columns:
             df_rows["__abs"] = pd.to_numeric(df_rows[variacao_col], errors="coerce").abs()
             df_rows = df_rows.sort_values("__abs", ascending=False).drop(columns=["__abs"])
@@ -1160,97 +1180,67 @@ with tab_resumo:
         for _, r in df_rows.iterrows():
             obra = str(r.get("OBRA", "")).strip()
 
-            html.append("<tr>")
-            html.append(f"<td class='obra'>{obra}</td>")
+            html_parts.append("<tr>")
+            html_parts.append(f"<td class='obra'>{obra}</td>")
 
             if mostrar_meses and sel_month_cols:
                 for mc in sel_month_cols:
-                    v = r.get(mc, None)
-                    html.append(f"<td class='right'>{_bar_cell(v, col_vmax.get(mc, 0.0))}</td>")
+                    html_parts.append(f"<td class='right num'>{_pill_value(r.get(mc, None))}</td>")
             else:
                 if last_month_col:
-                    html.append(f"<td class='right'><span class='num'>{fmt_func(r.get(last_month_col, None))}</span></td>")
+                    html_parts.append(f"<td class='right num'>{_pill_value(r.get(last_month_col, None))}</td>")
 
             if variacao_col:
-                html.append(f"<td class='right'>{_chip(r.get(variacao_col, None))}</td>")
+                html_parts.append(f"<td class='right num'>{_pill_var(r.get(variacao_col, None))}</td>")
 
-            html.append("</tr>")
+            html_parts.append("</tr>")
 
-        # ====== LINHA TOTAL (penúltima) ======
-        html.append("<tr class='row-total'>")
-        html.append("<td class='obra'>TOTAL (obras filtradas)</td>")
+        # ===== Linha TOTAL (penúltima) =====
+        html_parts.append("<tr class='row-total'>")
+        html_parts.append("<td class='obra'>TOTAL (obras filtradas)</td>")
 
         if mostrar_meses and sel_month_cols:
             for mc in sel_month_cols:
-                html.append(f"<td class='right'>{_bar_cell(total_month_vals.get(mc, None), col_vmax.get(mc, 0.0))}</td>")
+                html_parts.append(f"<td class='right num'>{_pill_value(total_month_vals.get(mc, None))}</td>")
         else:
             if last_month_col:
-                html.append(f"<td class='right'><span class='num'>{fmt_func(total_last)}</span></td>")
+                html_parts.append(f"<td class='right num'>{_pill_value(total_last)}</td>")
 
         if variacao_col:
-            html.append(f"<td class='right'>{_chip(total_varf)}</td>")
+            html_parts.append(f"<td class='right num'>{_pill_var(total_varf)}</td>")
 
-        html.append("</tr>")
+        html_parts.append("</tr>")
 
-        # ====== LINHA Δ TOTAL (ÚLTIMA LINHA) ======
-        html.append("<tr class='row-delta'>")
-        html.append("<td class='obra'>Δ TOTAL (mês a mês)</td>")
-
-        if mostrar_meses and sel_month_cols:
-            for mc in sel_month_cols:
-                dv = delta_total_vals.get(mc, None)
-                # aqui a barra é baseada no máximo das deltas no período (pra ficar coerente)
-                # calcula vmax_delta uma vez:
-            # (vamos calcular vmax_delta fora do loop pra evitar repetição)
-        else:
-            # modo compacto: mostra o delta do último mês (se existir)
-            pass
-
-        html.append("</tr>")
-
-        # Fechar tabela primeiro pra poder reabrir? Não: vamos "reconstruir" a linha Δ com vmax_delta calculado.
-        # Então removemos a linha Δ que acabamos de montar e vamos montar corretamente:
-        html = html[:-1]  # remove "</tr>"
-        html = html[:-1]  # remove "<tr class='row-delta'>"
-
-        # calcula vmax_delta
-        vmax_delta = 0.0
-        if sel_month_cols and len(sel_month_cols) >= 2:
-            for i in range(1, len(sel_month_cols)):
-                mc = sel_month_cols[i]
-                dv = delta_total_vals.get(mc, 0.0) or 0.0
-                vmax_delta = max(vmax_delta, abs(float(dv)))
-        # monta linha Δ de verdade
-        html.append("<tr class='row-delta'>")
-        html.append("<td class='obra'>Δ TOTAL (mês a mês)</td>")
+        # ===== Linha Δ TOTAL (ÚLTIMA) =====
+        html_parts.append("<tr class='row-delta'>")
+        html_parts.append("<td class='obra'>Δ TOTAL (mês a mês)</td>")
 
         if mostrar_meses and sel_month_cols:
             for mc in sel_month_cols:
                 dv = delta_total_vals.get(mc, None)
-                html.append(f"<td class='right'>{_bar_cell(dv, vmax_delta)}</td>")
+                # mesma lógica de cor (+ vermelho, - verde)
+                html_parts.append(f"<td class='right num'>{_pill_var(dv)}</td>")
         else:
-            if last_month_col and sel_month_cols and len(sel_month_cols) >= 2:
+            if last_month_col:
                 dv_last = delta_total_vals.get(last_month_col, None)
-                html.append(f"<td class='right'><span class='num'>{fmt_func(dv_last)}</span></td>")
-            elif last_month_col:
-                html.append("<td class='right'><span class='muted'>—</span></td>")
+                html_parts.append(f"<td class='right num'>{_pill_var(dv_last)}</td>")
 
         if variacao_col:
-            # mantém a variação final do TOTAL na última linha também (pra bater o olho)
-            html.append(f"<td class='right'>{_chip(total_varf)}</td>")
+            # opcional: repetir a var final do total aqui pra leitura
+            html_parts.append(f"<td class='right num'>{_pill_var(total_varf)}</td>")
 
-        html.append("</tr>")
+        html_parts.append("</tr>")
 
-        html.append("</tbody></table></div></div>")
+        html_parts.append("</tbody></table></div></div>")
 
-        st.markdown("#### Visão geral (TOTAL + Δ TOTAL no rodapé)")
-        st.caption("A última linha é **Δ TOTAL**: mês atual − mês anterior, do **TOTAL das obras filtradas**.")
-        st.markdown("".join(html), unsafe_allow_html=True)
+        st.markdown("#### Visão geral (clean)")
+        st.caption("Valores mensais **sem cor**. Variações: **positivo = vermelho**, **negativo = verde**. A última linha é o **Δ TOTAL**.")
+        st.markdown("".join(html_parts), unsafe_allow_html=True)
 
         st.markdown("---")
 
         # =========================
-        # DETALHES (Economias/Desvios) - mantém
+        # DETALHES (Economias/Desvios) — mantém
         # =========================
         st.subheader("Detalhes (Economias e Desvios do mês)")
 
