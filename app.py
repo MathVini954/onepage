@@ -7,7 +7,6 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 
 from src.excel_reader import (
@@ -137,19 +136,17 @@ else:
 
 PLOTLY_TEMPLATE = PALETTE["plotly_template"]
 
-# CSS (blindado)
+# CSS
 st.markdown(
     f"""
 <style>
   html, body, [data-testid="stAppViewContainer"], .stApp {{
     background: {PALETTE["bg"]} !important;
   }}
-
   header[data-testid="stHeader"] {{
     background: {PALETTE["bg"]} !important;
     border-bottom: 1px solid {PALETTE["border"]} !important;
   }}
-
   section[data-testid="stSidebar"] {{
     display: block !important;
     visibility: visible !important;
@@ -159,18 +156,15 @@ st.markdown(
     background: {PALETTE["sidebar_bg"]} !important;
     border-right: 1px solid {PALETTE["border"]} !important;
   }}
-
   [data-testid="collapsedControl"] {{
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
   }}
-
   .block-container {{
     padding-top: 1.25rem;
     padding-bottom: 2rem;
   }}
-
   @media (max-width: 900px){
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
     h1 {{ font-size: 1.6rem !important; }}
@@ -369,19 +363,6 @@ def card_resumo(title: str, icon: str, rows_html: str, border: str, bg: str) -> 
 """
 
 
-def styled_dataframe(df: pd.DataFrame):
-    if df is None or df.empty:
-        st.info("Sem dados.")
-        return
-    tbl = df.copy()
-    money_cols = ["ORÇAMENTO INICIAL", "ORÇAMENTO REAJUSTADO", "CUSTO FINAL", "VARIAÇÃO", "VARIAÇÃO (R$)"]
-    for c in money_cols:
-        if c in tbl.columns:
-            tbl[c] = pd.to_numeric(tbl[c], errors="coerce")
-    fmt_map = {c: fmt_brl for c in money_cols if c in tbl.columns}
-    st.dataframe(tbl.style.format(fmt_map), use_container_width=True, hide_index=True)
-
-
 def sum_abs_column(df: pd.DataFrame, col: str) -> float:
     if df is None or df.empty or col not in df.columns:
         return 0.0
@@ -390,7 +371,7 @@ def sum_abs_column(df: pd.DataFrame, col: str) -> float:
 
 
 # ============================================================
-# Leitura ORÇAMENTO_RESUMO (BI) - dentro do app.py
+# ORÇAMENTO_RESUMO (leitura robusta dentro do app.py)
 # ============================================================
 def _norm(s: str) -> str:
     s = "" if s is None else str(s).strip()
@@ -400,10 +381,12 @@ def _norm(s: str) -> str:
 
 
 def read_orcamento_resumo_from_wb(workbook) -> pd.DataFrame | None:
-    # tenta achar aba
     target = None
     for name in workbook.sheetnames:
-        if _norm(name) in ["ORCAMENTO_RESUMO", "ORÇAMENTO_RESUMO", "ORCAMENTO RESUMO", "ORÇAMENTO RESUMO"]:
+        if _norm(name).replace(" ", "_") == "ORCAMENTO_RESUMO":
+            target = name
+            break
+        if _norm(name) == "ORÇAMENTO_RESUMO":
             target = name
             break
     if target is None:
@@ -411,55 +394,52 @@ def read_orcamento_resumo_from_wb(workbook) -> pd.DataFrame | None:
 
     ws_r = workbook[target]
 
-    # achar header row com "OBRA"
+    # achar linha de header contendo OBRA
     header_row = None
-    max_scan = 250
-    for r in range(1, max_scan + 1):
-        row_vals = [ws_r.cell(row=r, column=c).value for c in range(1, 80)]
-        if any(_norm(v) == "OBRA" for v in row_vals if v is not None):
+    for r in range(1, 251):
+        vals = [ws_r.cell(row=r, column=c).value for c in range(1, 80)]
+        if any(_norm(v) == "OBRA" for v in vals if v is not None):
             header_row = r
             break
     if header_row is None:
         return None
 
-    # headers até último não vazio
-    headers = []
+    # headers até última coluna não vazia
     last_c = 1
-    for c in range(1, 200):
+    headers = []
+    for c in range(1, 201):
         v = ws_r.cell(row=header_row, column=c).value
-        if v is None and c > 10:
-            # heurística: depois de um bom trecho, parar
-            pass
         if v is not None:
             last_c = c
         headers.append("" if v is None else str(v).strip())
-
     headers = headers[:last_c]
-    # limpar headers vazios
     headers = [h if h else f"COL_{i+1}" for i, h in enumerate(headers)]
 
+    # data (para ao achar 20 linhas vazias seguidas)
     data = []
+    empty_streak = 0
     for r in range(header_row + 1, header_row + 5000):
-        first = ws_r.cell(row=r, column=1).value
-        if first is None:
-            # para quando encontrar várias linhas vazias
-            # (mas tolera buracos pequenos)
-            empty_row = True
-            for c in range(1, last_c + 1):
-                if ws_r.cell(row=r, column=c).value is not None:
-                    empty_row = False
-                    break
-            if empty_row:
-                break
-
         row = [ws_r.cell(row=r, column=c).value for c in range(1, last_c + 1)]
+        if all(v is None or str(v).strip() == "" for v in row):
+            empty_streak += 1
+            if empty_streak >= 20:
+                break
+            continue
+        empty_streak = 0
         data.append(row)
 
     df = pd.DataFrame(data, columns=headers)
-    # drop linhas sem OBRA
+    if "OBRA" not in df.columns:
+        # tenta achar coluna equivalente
+        for c in df.columns:
+            if _norm(c) == "OBRA":
+                df.rename(columns={c: "OBRA"}, inplace=True)
+                break
+
     if "OBRA" in df.columns:
         df["OBRA"] = df["OBRA"].astype(str).str.strip()
         df = df[df["OBRA"].astype(str).str.strip().ne("")].copy()
+
     return df
 
 
@@ -482,11 +462,11 @@ st.divider()
 if debug:
     st.write("Arquivo:", excel_path.name)
     st.write("Abas:", obras)
-    st.write("Resumo Obras:", "OK" if df_orc_resumo is not None else "Não achou ORÇAMENTO_RESUMO")
+    st.write("ORÇAMENTO_RESUMO:", "OK" if df_orc_resumo is not None else "Não encontrado")
 
 
 # ============================================================
-# Ler dados (obra selecionada)
+# Ler dados (aba selecionada)
 # ============================================================
 resumo = read_resumo_financeiro(ws)
 df_idx = read_indice(ws)
@@ -747,67 +727,6 @@ with tab_dash:
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
         progress_card(k_real_acum, k_plan_acum, ref_month_label)
 
-    st.divider()
-
-    st.subheader("Detalhamento — Tabelas completas (com barras em degradê)")
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.markdown("### ACRÉSCIMOS / DESVIOS")
-        if df_acres.empty:
-            st.info("Sem dados.")
-        else:
-            show = df_acres.copy()
-            show["VARIAÇÃO"] = pd.to_numeric(show["VARIAÇÃO"], errors="coerce")
-            show = show.dropna(subset=["VARIAÇÃO"])
-            show["__abs"] = show["VARIAÇÃO"].abs()
-            show = show.sort_values("__abs", ascending=False)
-            show_top = show.head(top_n) if top_n is not None else show
-
-            top_bar = show.head(10).iloc[::-1]
-            vals = top_bar["VARIAÇÃO"].abs()
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=vals,
-                y=top_bar["DESCRIÇÃO"],
-                orientation="h",
-                marker=dict(color=vals, colorscale=PALETTE["bad_grad"], showscale=False),
-                name="R$",
-            ))
-            fig.update_layout(height=340, xaxis_title="R$")
-            st.plotly_chart(apply_plotly_theme(fig), use_container_width=True)
-
-            with st.expander("Ver tabela (Acréscimos)"):
-                styled_dataframe(show_top.drop(columns=["__abs"], errors="ignore"))
-
-    with c2:
-        st.markdown("### ECONOMIAS")
-        if df_econ.empty:
-            st.info("Sem dados.")
-        else:
-            show = df_econ.copy()
-            show["VARIAÇÃO"] = pd.to_numeric(show["VARIAÇÃO"], errors="coerce")
-            show = show.dropna(subset=["VARIAÇÃO"])
-            show["__abs"] = show["VARIAÇÃO"].abs()
-            show = show.sort_values("__abs", ascending=False)
-            show_top = show.head(top_n) if top_n is not None else show
-
-            top_bar = show.head(10).iloc[::-1]
-            vals = top_bar["VARIAÇÃO"].abs()
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=vals,
-                y=top_bar["DESCRIÇÃO"],
-                orientation="h",
-                marker=dict(color=vals, colorscale=PALETTE["good_grad"], showscale=False),
-                name="R$",
-            ))
-            fig.update_layout(height=340, xaxis_title="R$")
-            st.plotly_chart(apply_plotly_theme(fig), use_container_width=True)
-
-            with st.expander("Ver tabela (Economias)"):
-                styled_dataframe(show_top.drop(columns=["__abs"], errors="ignore"))
-
 
 # ============================================================
 # TAB Justificativas
@@ -869,7 +788,7 @@ with tab_resumo:
     st.subheader("Resumo das Obras — ORÇAMENTO_RESUMO")
 
     if df_orc_resumo is None or df_orc_resumo.empty:
-        st.info("Não encontrei a aba **ORÇAMENTO_RESUMO** no Excel (ou ela está vazia).")
+        st.info("Não encontrei a aba **ORÇAMENTO_RESUMO** no Excel (ou está vazia).")
         st.stop()
 
     df_show = df_orc_resumo.copy()
@@ -931,13 +850,12 @@ with tab_resumo:
     # ----------------------------
     # Controles BI
     # ----------------------------
-    ctl1, ctl2, ctl3, ctl4 = st.columns([1.2, 2.0, 2.8, 2.0])
+    ctl1, ctl2, ctl3 = st.columns([1.2, 2.6, 3.2])
 
     with ctl1:
         expandir = st.toggle("Expandir meses", value=False)
 
     with ctl2:
-        # período
         if expandir:
             default_start = month_cols_all[max(0, len(month_cols_all) - 6)]
             default_end = month_cols_all[-1]
@@ -946,15 +864,14 @@ with tab_resumo:
         else:
             start_label, end_label = last_month_col, last_month_col
 
-    # filtro obra
     obras_resumo = sorted([o for o in df_show["OBRA"].dropna().unique().tolist() if str(o).strip()])
     with ctl3:
-        obras_filtro = st.multiselect("Filtrar obras", obras_resumo, default=obras_resumo)
+        colf1, colf2 = st.columns([2, 1.2])
+        with colf1:
+            obras_filtro = st.multiselect("Filtrar obras", obras_resumo, default=obras_resumo)
+        with colf2:
+            busca = st.text_input("Buscar", value="")
 
-    with ctl4:
-        busca = st.text_input("Buscar obra", value="")
-
-    # aplicar filtros
     df_f = df_show[df_show["OBRA"].isin(obras_filtro)].copy()
     if busca.strip():
         df_f = df_f[df_f["OBRA"].str.contains(busca.strip(), case=False, na=False)].copy()
@@ -966,14 +883,13 @@ with tab_resumo:
         start_idx, end_idx = end_idx, start_idx
     months_in_range = month_cols_all[start_idx:end_idx + 1]
 
-    # view: meses + variação do período (sempre calculada)
+    # view: OBRA + meses + variação do período
     df_view = df_f[["OBRA"] + months_in_range].copy()
-
     first_m = months_in_range[0]
     last_m = months_in_range[-1]
     df_view["VARIAÇÃO (R$)"] = df_view[last_m] - df_view[first_m]
 
-    # status para agrupamento (expand/collapse)
+    # status para agrupamento
     def status_from_var(v):
         if pd.isna(v):
             return "Neutro"
@@ -1006,22 +922,15 @@ with tab_resumo:
     df_view = pd.concat([df_view, pd.DataFrame([total_row, delta_row])], ignore_index=True)
 
     # ----------------------------
-    # Obra em foco (para cards bonitos)
+    # Obra em foco -> cards bonitos (lado a lado)
     # ----------------------------
     if "obra_foco" not in st.session_state:
-        # pega primeira obra real
-        first_real = None
-        for o in df_f["OBRA"].tolist():
-            if o in obras:
-                first_real = o
-                break
-        st.session_state["obra_foco"] = first_real or (obras[0] if obras else "")
+        st.session_state["obra_foco"] = obra  # começa na obra do sidebar
 
     foco_candidates = [o for o in df_f["OBRA"].dropna().unique().tolist() if o in obras]
     if not foco_candidates:
         foco_candidates = obras
 
-    # placeholder para obra foco (atualiza quando clica na tabela)
     obra_foco = st.selectbox(
         "Obra em foco (cards abaixo)",
         foco_candidates,
@@ -1029,7 +938,6 @@ with tab_resumo:
         key="obra_foco",
     )
 
-    # cards lado a lado (como o print) — para obra foco
     if obra_foco in obras:
         ws_det = wb[obra_foco]
         df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
@@ -1066,7 +974,7 @@ with tab_resumo:
     st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
     # ----------------------------
-    # AgGrid (BI)
+    # AgGrid (BI com agrupamento)
     # ----------------------------
     money_formatter = JsCode("""
     function(params){
@@ -1084,11 +992,9 @@ with tab_resumo:
       const v = params.value;
 
       if (field === "OBRA"){
-        if (row.startsWith("TOTAL")) return {fontWeight: 900};
-        if (row.startsWith("Δ")) return {fontWeight: 900};
+        if (row.startsWith("TOTAL") || row.startsWith("Δ")) return {fontWeight: 900};
         return {fontWeight: 900};
       }
-
       if (v === null || v === undefined || v === "") return {};
 
       // Linha Δ: cores vibrantes
@@ -1113,40 +1019,30 @@ with tab_resumo:
       if (row.startsWith("TOTAL")){
         return { fontWeight: 900, backgroundColor: "rgba(255,255,255,0.04)" };
       }
-
       return {};
     }
     """)
 
-    # builder
     gb = GridOptionsBuilder.from_dataframe(df_view)
-    gb.configure_default_column(
-        resizable=True,
-        sortable=True,
-        filter=True,
-        wrapText=True,
-        autoHeight=True,
-    )
+    gb.configure_default_column(resizable=True, sortable=True, filter=True, wrapText=True, autoHeight=True)
 
     gb.configure_grid_options(
         enableRangeSelection=True,
         rowSelection="single",
-        sideBar=True,  # painel de filtros
-        groupDefaultExpanded=0,  # grupos recolhidos por padrão
+        sideBar=True,
+        groupDefaultExpanded=0,  # recolhido
+        suppressRowClickSelection=False,
     )
 
-    # Agrupamento por STATUS (clica e abre o grupo)
+    # Agrupar por STATUS (expand/collapse)
     gb.configure_column("STATUS", rowGroup=True, hide=True)
 
-    # OBRA fixa
-    gb.configure_column("OBRA", pinned="left", width=210)
+    gb.configure_column("OBRA", pinned="left", width=220)
 
-    # meses
     for m in months_in_range:
         gb.configure_column(m, type=["numericColumn"], valueFormatter=money_formatter, cellStyle=cell_style, width=140)
 
-    # variação fixa à direita
-    gb.configure_column("VARIAÇÃO (R$)", pinned="right", type=["numericColumn"], valueFormatter=money_formatter, cellStyle=cell_style, width=160)
+    gb.configure_column("VARIAÇÃO (R$)", pinned="right", type=["numericColumn"], valueFormatter=money_formatter, cellStyle=cell_style, width=170)
 
     grid_options = gb.build()
 
@@ -1159,25 +1055,21 @@ with tab_resumo:
         height=280 if not expandir else 360,
     )
 
-     # seleção (blindado)
-selected = grid.get("selected_rows", [])
+    # ✅ Seleção blindada (SEM if selected:)
+    selected = grid.get("selected_rows", [])
+    if selected is None:
+        selected_rows = []
+    elif isinstance(selected, pd.DataFrame):
+        selected_rows = selected.to_dict("records")
+    elif isinstance(selected, dict):
+        selected_rows = [selected]
+    elif isinstance(selected, (list, tuple)):
+        selected_rows = list(selected)
+    else:
+        selected_rows = []
 
-# Normaliza selected_rows para SEMPRE virar list[dict]
-if selected is None:
-    selected_rows = []
-elif isinstance(selected, pd.DataFrame):
-    selected_rows = selected.to_dict("records")
-elif isinstance(selected, dict):
-    selected_rows = [selected]
-elif isinstance(selected, (list, tuple)):
-    selected_rows = list(selected)
-else:
-    selected_rows = []
-
-# Agora sim: checagem segura
-if len(selected_rows) > 0:
-    obra_sel = selected_rows[0].get("OBRA")
-    if obra_sel in obras and obra_sel != st.session_state.get("obra_foco"):
-        st.session_state["obra_foco"] = obra_sel
-        st.rerun()
-
+    if len(selected_rows) > 0:
+        obra_sel = selected_rows[0].get("OBRA")
+        if obra_sel in obras and obra_sel != st.session_state.get("obra_foco"):
+            st.session_state["obra_foco"] = obra_sel
+            st.rerun()
