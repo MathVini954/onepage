@@ -1074,7 +1074,7 @@ with tab_resumo:
     border-collapse:separate;
     border-spacing:0;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
-    background:#ffffff;
+    background:#17181f;
   }
 
   .orc-table thead th{
@@ -1119,7 +1119,7 @@ with tab_resumo:
     font-weight:800;
     font-size:12px;
     border:1px solid rgba(226,232,240,1);
-    background:#17181f;
+    background:#ffffff;
   }
   .pill.neutral{ color:#0f172a; }
   .pill.good{
