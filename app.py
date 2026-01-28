@@ -307,34 +307,49 @@ def progress_card(real_ratio: float | None, planned_ratio: float | None, ref_mon
     planned_pct = planned_ratio * 100
 
     st.markdown(
-        f"""
-<div style="border:1px solid {PALETTE["border"]}; background:{PALETTE["card"]}; border-radius:16px; padding:14px 16px;">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <div style="font-size:12px; color:{PALETTE["text"]}; font-weight:900;">Obra vs. Planejado (acum.)</div>
-    <div style="font-size:12px; color:{PALETTE["muted"]};">{html.escape(ref_month_label)}</div>
-  </div>
+    """
+<style>
+  html, body, [data-testid="stAppViewContainer"], .stApp {{
+    background: {bg} !important;
+  }}
+  header[data-testid="stHeader"] {{
+    background: {bg} !important;
+    border-bottom: 1px solid {border} !important;
+  }}
+  section[data-testid="stSidebar"] {{
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }}
+  section[data-testid="stSidebar"] > div {{
+    background: {sidebar_bg} !important;
+    border-right: 1px solid {border} !important;
+  }}
+  [data-testid="collapsedControl"] {{
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }}
+  .block-container {{
+    padding-top: 1.25rem;
+    padding-bottom: 2rem;
+  }}
+  @media (max-width: 900px) {{
+    .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
+    h1 {{ font-size: 1.6rem !important; }}
+    h2 {{ font-size: 1.25rem !important; }}
+    h3 {{ font-size: 1.1rem !important; }}
+    [data-testid="stSidebar"] {{ width: 85vw !important; }}
+  }}
+</style>
+""".format(
+        bg=PALETTE["bg"],
+        border=PALETTE["border"],
+        sidebar_bg=PALETTE["sidebar_bg"],
+    ),
+    unsafe_allow_html=True,
+)
 
-  <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:flex-end;">
-    <div>
-      <div style="font-size:12px; color:{PALETTE["muted"]};">Real</div>
-      <div style="font-size:28px; font-weight:900; line-height:1; color:{PALETTE["text"]};">{real_pct:.0f}%</div>
-    </div>
-    <div style="text-align:right;">
-      <div style="font-size:12px; color:{PALETTE["muted"]};">Planejado</div>
-      <div style="font-size:16px; font-weight:900; color:{PALETTE["text"]};">{planned_pct:.0f}%</div>
-    </div>
-  </div>
-
-  <div style="margin-top:12px;">
-    <div style="height:10px; background:{PALETTE["track"]}; border-radius:999px; position:relative;">
-      <div style="width:{planned_pct:.2f}%; height:10px; background:{PALETTE["planned_bar"]}; border-radius:999px;"></div>
-      <div style="width:{real_pct:.2f}%; height:10px; background:{PALETTE["real_bar"]}; border-radius:999px; position:absolute; top:0; left:0;"></div>
-    </div>
-  </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
 
 
 def build_rows(items: list[tuple[str, float]], color: str, prefix: str = "") -> str:
