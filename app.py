@@ -1159,22 +1159,25 @@ with tab_resumo:
         height=280 if not expandir else 360,
     )
 
-    # seleção (blindado)
-    selected = grid.get("selected_rows", None)
-    if selected is None:
-        selected_rows = []
-    elif isinstance(selected, (list, tuple)):
-        selected_rows = selected
-    elif hasattr(selected, "to_dict"):
-        try:
-            selected_rows = selected.to_dict("records")
-        except Exception:
-            selected_rows = []
-    else:
-        selected_rows = []
+     # seleção (blindado)
+selected = grid.get("selected_rows", [])
 
-    if len(selected_rows) > 0:
-        obra_sel = selected_rows[0].get("OBRA")
-        if obra_sel in obras and obra_sel != st.session_state.get("obra_foco"):
-            st.session_state["obra_foco"] = obra_sel
-            st.rerun()
+# Normaliza selected_rows para SEMPRE virar list[dict]
+if selected is None:
+    selected_rows = []
+elif isinstance(selected, pd.DataFrame):
+    selected_rows = selected.to_dict("records")
+elif isinstance(selected, dict):
+    selected_rows = [selected]
+elif isinstance(selected, (list, tuple)):
+    selected_rows = list(selected)
+else:
+    selected_rows = []
+
+# Agora sim: checagem segura
+if len(selected_rows) > 0:
+    obra_sel = selected_rows[0].get("OBRA")
+    if obra_sel in obras and obra_sel != st.session_state.get("obra_foco"):
+        st.session_state["obra_foco"] = obra_sel
+        st.rerun()
+
