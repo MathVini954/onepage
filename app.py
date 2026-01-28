@@ -858,29 +858,128 @@ with tab_resumo:
     if df_orc_resumo is None or df_orc_resumo.empty:
         st.info("A aba **ORÇAMENTO_RESUMO** não foi encontrada ou está vazia.")
     else:
-        df_show = df_orc_resumo.copy()
-
-        # =========================
-        # Helpers / Preparação
-        # =========================
         import re
         import unicodedata
         import pandas as pd
 
+        df_show = df_orc_resumo.copy()
+
+        # =========================
+        # Helpers
+        # =========================
         def _norm_colname(x: str) -> str:
             s = "" if x is None else str(x).strip()
             s = unicodedata.normalize("NFKD", s)
             s = "".join(ch for ch in s if not unicodedata.combining(ch))
             return " ".join(s.upper().split())
 
-        # garante OBRA
-        if "OBRA" in df_show.columns:
-            df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
-        else:
+        def _month_sort_key(col):
+            """Ordena colunas tipo 01/2026, 1/2026, JAN/2026, JAN 2026 (pt-br)."""
+            s = _norm_colname(col)
+
+            m = re.search(r"\b(\d{1,2})\s*/\s*(\d{4})\b", s)  # 01/2026
+            if m:
+                mm = int(m.group(1))
+                yy = int(m.group(2))
+                if 1 <= mm <= 12:
+                    return pd.Timestamp(yy, mm, 1)
+
+            pt = {"JAN":1,"FEV":2,"MAR":3,"ABR":4,"MAI":5,"JUN":6,"JUL":7,"AGO":8,"SET":9,"OUT":10,"NOV":11,"DEZ":12}
+            m2 = re.search(r"\b(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\b", s)
+            y2 = re.search(r"\b(20\d{2})\b", s)
+            if m2 and y2:
+                mm = pt[m2.group(1)]
+                yy = int(y2.group(1))
+                return pd.Timestamp(yy, mm, 1)
+
+            return pd.Timestamp(2999, 12, 1)
+
+        # fallback caso fmt_brl não exista no seu código
+        def _fmt_brl_fallback(v):
+            try:
+                if pd.isna(v):
+                    return "—"
+                v = float(v)
+            except Exception:
+                return "—"
+            s = f"{v:,.2f}"
+            s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+            return f"R$ {s}"
+
+        fmt_func = globals().get("fmt_brl", _fmt_brl_fallback)
+
+        def _chip_class(v):
+            try:
+                v = float(v)
+            except Exception:
+                return "chip neutral"
+            if v > 0:
+                return "chip bad"   # desvio
+            if v < 0:
+                return "chip good"  # economia
+            return "chip neutral"
+
+        def _sparkline_svg(values, width=170, height=34, pad=3):
+            """
+            Sparkline dos Δ (mês atual - mês anterior).
+            Render em SVG (HTML) mais visual.
+            """
+            if values is None:
+                values = []
+
+            if len(values) < 1:
+                return "<span class='muted'>Sem Δ no período</span>"
+
+            v2 = []
+            for x in values:
+                try:
+                    if x is None or (isinstance(x, float) and pd.isna(x)):
+                        v2.append(0.0)
+                    else:
+                        v2.append(float(x))
+                except Exception:
+                    v2.append(0.0)
+
+            if len(v2) == 1:
+                v2 = [0.0, v2[0]]  # força 2 pontos pra desenhar
+
+            vmin, vmax = min(v2), max(v2)
+            if vmin == vmax:
+                vmin -= 1
+                vmax += 1
+
+            def y_of(v):
+                return pad + (vmax - v) * (height - 2 * pad) / (vmax - vmin)
+
+            n = len(v2)
+            xs = [pad + i * (width - 2 * pad) / (n - 1) for i in range(n)]
+            pts = " ".join(f"{xs[i]:.2f},{y_of(v2[i]):.2f}" for i in range(n))
+
+            # linha do zero (se estiver no range)
+            if vmin <= 0 <= vmax:
+                y0 = y_of(0.0)
+                zero_line = f"<line x1='{pad}' y1='{y0:.2f}' x2='{width-pad}' y2='{y0:.2f}' class='zero'/>"
+            else:
+                zero_line = ""
+
+            return (
+                f"<svg width='{width}' height='{height}' viewBox='0 0 {width} {height}' preserveAspectRatio='none'>"
+                f"{zero_line}"
+                f"<polyline points='{pts}' class='spark'/>"
+                f"<circle cx='{xs[-1]:.2f}' cy='{y_of(v2[-1]):.2f}' r='2.2' class='dot'/>"
+                f"</svg>"
+            )
+
+        # =========================
+        # Validações / Detecção colunas
+        # =========================
+        if "OBRA" not in df_show.columns:
             st.error("A coluna **OBRA** não foi encontrada na aba ORÇAMENTO_RESUMO.")
             st.stop()
 
-        # detectar coluna variação (primeira que contenha 'VARIA')
+        df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
+
+        # detectar coluna variação final (primeira que contenha 'VARIA')
         variacao_col = None
         for c in df_show.columns:
             if "VARIA" in _norm_colname(c):
@@ -897,188 +996,195 @@ with tab_resumo:
                 continue
             month_cols.append(c)
 
-        # converte meses + variação pra número
+        # converte meses + variação final pra número
         for c in month_cols + ([variacao_col] if variacao_col else []):
             if c is None:
                 continue
             df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
 
-        # =========================
-        # Ordenação dos meses
-        # =========================
-        def _month_sort_key(col):
-            # tenta entender: 01/2026, 1/2026, JAN/2026, JAN 2026 etc.
-            s = _norm_colname(col)
-
-            # 01/2026
-            m = re.search(r"\b(\d{1,2})\s*/\s*(\d{4})\b", s)
-            if m:
-                mm = int(m.group(1))
-                yy = int(m.group(2))
-                if 1 <= mm <= 12:
-                    return pd.Timestamp(yy, mm, 1)
-
-            # JAN/2026
-            pt = {
-                "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
-                "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12
-            }
-            m2 = re.search(r"\b(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\b", s)
-            y2 = re.search(r"\b(20\d{2})\b", s)
-            if m2 and y2:
-                mm = pt[m2.group(1)]
-                yy = int(y2.group(1))
-                return pd.Timestamp(yy, mm, 1)
-
-            # fallback: joga pro fim mantendo algo estável
-            return pd.Timestamp(2999, 12, 1)
-
-        # mantém só meses com algum valor e ordena
+        # ordenar meses e manter só os que têm algum valor
         month_cols_sorted = [c for c in month_cols if df_show[c].notna().any()]
         month_cols_sorted = sorted(month_cols_sorted, key=_month_sort_key) if month_cols_sorted else []
 
         # =========================
-        # FILTRO DE PERÍODO (TOPO)
+        # FILTROS (TOPO)
         # =========================
-        st.markdown("#### Período de visualização")
+        top1, top2, top3 = st.columns([2.3, 2.2, 1.5])
 
-        if not month_cols_sorted:
-            st.warning("Não encontrei colunas de mês com valores para montar o período.")
-            sel_month_cols = []
-        else:
-            if len(month_cols_sorted) == 1:
+        with top1:
+            st.markdown("#### Período")
+            if not month_cols_sorted:
+                st.warning("Não encontrei colunas de mês com valores.")
+                sel_month_cols = []
+            elif len(month_cols_sorted) == 1:
                 sel_month_cols = month_cols_sorted[:]
-                st.caption(f"Somente 1 mês disponível: **{sel_month_cols[0]}**")
+                st.caption(f"Somente 1 mês: **{sel_month_cols[0]}**")
             else:
-                # default: últimos 6 meses (se tiver)
                 start_idx = max(0, len(month_cols_sorted) - 6)
                 default_range = (month_cols_sorted[start_idx], month_cols_sorted[-1])
-
                 periodo = st.select_slider(
                     "Selecione o período (mês inicial → mês final)",
                     options=month_cols_sorted,
                     value=default_range,
-                    key="periodo_resumo_orc",
+                    key="periodo_orc_resumo",
                 )
-
                 i0 = month_cols_sorted.index(periodo[0])
                 i1 = month_cols_sorted.index(periodo[1])
                 if i0 > i1:
                     i0, i1 = i1, i0
                 sel_month_cols = month_cols_sorted[i0:i1 + 1]
 
+        with top2:
+            st.markdown("#### Obras")
+            todas = st.toggle("Todas as obras", value=True, key="todas_obras_orc")
+            obras_all = sorted([x for x in df_show["OBRA"].dropna().astype(str).tolist() if str(x).strip() != ""])
+            if not todas:
+                obras_sel = st.multiselect(
+                    "Selecione as obras",
+                    options=obras_all,
+                    default=obras_all[:10] if len(obras_all) > 10 else obras_all,
+                    key="obras_sel_orc",
+                )
+            else:
+                obras_sel = obras_all
+
+        with top3:
+            st.markdown("#### Colunas")
+            mostrar_deltas_cols = st.toggle("Mostrar Δ (colunas)", value=False, key="show_deltas_cols_orc")
+            mostrar_meses_cols = st.toggle("Mostrar valores mensais", value=False, key="show_months_cols_orc")
+
+        df_f = df_show[df_show["OBRA"].isin(obras_sel)].copy()
+
+        # =========================
+        # CÁLCULO: Δ mês a mês (mês atual - mês anterior)
+        # =========================
+        delta_cols = []
+        if sel_month_cols and len(sel_month_cols) >= 2:
+            for i in range(1, len(sel_month_cols)):
+                c_prev = sel_month_cols[i - 1]
+                c_curr = sel_month_cols[i]
+                c_delta = f"Δ {c_curr}"
+                df_f[c_delta] = df_f[c_curr] - df_f[c_prev]
+                delta_cols.append(c_delta)
+
+        # sparkline = sequência de deltas do período
+        if delta_cols:
+            df_f["__spark_deltas"] = df_f[delta_cols].values.tolist()
+        else:
+            df_f["__spark_deltas"] = [[] for _ in range(len(df_f))]
+
         last_month_col = sel_month_cols[-1] if sel_month_cols else None
 
         # =========================
-        # CONTROLES VISUAIS
+        # TABELA ULTRA VISUAL (HTML)
         # =========================
-        c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.4, 2.2])
-        with c1:
-            expandir = st.toggle("Mostrar colunas mês a mês", value=False, key="exp_meses_orc")
-        with c2:
-            ordenar_impacto = st.toggle("Ordenar por maior impacto", value=True, key="ord_impacto_orc")
-        with c3:
-            somente_com_mov = st.toggle("Somente com movimento", value=False, key="mov_orc")
-        with c4:
-            busca_obra = st.text_input("Buscar obra", value="", placeholder="Digite parte do nome...", key="busca_orc")
+        css = r'''
+<style>
+  .orc-wrap{border:1px solid rgba(148,163,184,.35); border-radius:14px; overflow:hidden;}
+  .orc-table{width:100%; border-collapse:separate; border-spacing:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;}
+  .orc-table thead th{
+    position:sticky; top:0; z-index:2;
+    background:rgba(15,23,42,.92);
+    color:#e2e8f0; text-align:left; font-size:12px; letter-spacing:.02em;
+    padding:10px 10px; border-bottom:1px solid rgba(148,163,184,.25);
+    white-space:nowrap;
+  }
+  .orc-table tbody td{
+    padding:10px 10px; border-bottom:1px solid rgba(148,163,184,.18);
+    vertical-align:middle; font-size:13px; color:#0f172a;
+    background:rgba(255,255,255,.70);
+  }
+  .orc-table tbody tr:hover td{ background:rgba(226,232,240,.65); }
+  .obra{font-weight:800; max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .spark{ fill:none; stroke:rgba(15,23,42,.72); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .zero{ stroke:rgba(148,163,184,.65); stroke-width:1; stroke-dasharray:3 3; }
+  .dot{ fill:rgba(15,23,42,.72); }
+  .chip{ display:inline-block; padding:5px 9px; border-radius:999px; font-weight:900; font-size:12px; }
+  .chip.good{ background:rgba(34,197,94,.16); color:rgb(22,101,52); border:1px solid rgba(34,197,94,.35); }
+  .chip.bad{ background:rgba(239,68,68,.14); color:rgb(153,27,27); border:1px solid rgba(239,68,68,.35); }
+  .chip.neutral{ background:rgba(148,163,184,.18); color:rgb(51,65,85); border:1px solid rgba(148,163,184,.35); }
+  .muted{ color:rgb(71,85,105); font-size:12px; white-space:nowrap; }
+  .num{ white-space:nowrap; font-variant-numeric: tabular-nums; }
+  .right{ text-align:right; }
+  .scroll{ max-height:560px; overflow:auto; }
+  .hdrsub{ display:block; font-size:11px; color:rgba(226,232,240,.75); font-weight:600; margin-top:2px;}
+</style>
+'''
+
+        # cabeçalhos dinâmicos
+        hdr_delta = "Variação mês a mês (Δ)"
+        if sel_month_cols and len(sel_month_cols) >= 2:
+            hdr_periodo = f"{sel_month_cols[1]} → {sel_month_cols[-1]}"
+        elif sel_month_cols:
+            hdr_periodo = f"{sel_month_cols[0]}"
+        else:
+            hdr_periodo = "—"
+
+        html = [css, "<div class='orc-wrap'><div class='scroll'><table class='orc-table'>"]
+        html.append("<thead><tr>")
+        html.append("<th>OBRA</th>")
+        html.append(f"<th>{hdr_delta}<span class='hdrsub'>{hdr_periodo}</span></th>")
+
+        if mostrar_deltas_cols and delta_cols:
+            for dc in delta_cols:
+                html.append(f"<th class='right'>{dc}</th>")
+
+        if mostrar_meses_cols and sel_month_cols:
+            for mc in sel_month_cols:
+                html.append(f"<th class='right'>{mc}</th>")
 
         if last_month_col:
-            st.caption(f"Período até **{last_month_col}** | Variação final: **{variacao_col or 'N/A'}**")
-
-        # =========================
-        # MONTA TABELA MAIS VISUAL
-        # =========================
-        df_view = df_show.copy()
-
-        # Filtro: busca obra
-        if busca_obra.strip():
-            mask = df_view["OBRA"].astype(str).str.upper().str.contains(busca_obra.strip().upper(), na=False)
-            df_view = df_view[mask].copy()
-
-        # Filtro: somente com movimento no período (qualquer mês != 0 / notna)
-        if somente_com_mov and sel_month_cols:
-            m = df_view[sel_month_cols].copy()
-            has_mov = m.notna().any(axis=1) & (m.fillna(0).abs().sum(axis=1) > 0)
-            df_view = df_view[has_mov].copy()
-
-        # Sparkline: linha mês a mês do período selecionado
-        if sel_month_cols:
-            df_view["TENDÊNCIA (período)"] = df_view[sel_month_cols].values.tolist()
-        else:
-            df_view["TENDÊNCIA (período)"] = [[] for _ in range(len(df_view))]
-
-        # Sinal visual da variação final (mantém a VARIAÇÃO como coluna numérica)
-        if variacao_col and variacao_col in df_view.columns:
-            def _sinal(v):
-                try:
-                    v = float(v)
-                except Exception:
-                    return "—"
-                if v > 0:
-                    return "🟥"  # desvio (pior)
-                if v < 0:
-                    return "🟩"  # economia (melhor)
-                return "⚪"
-            df_view["SINAL"] = df_view[variacao_col].apply(_sinal)
-
-        # Seleção de colunas (visual)
-        cols_out = ["OBRA", "TENDÊNCIA (período)"]
-
-        if expandir and sel_month_cols:
-            cols_out += sel_month_cols
-        else:
-            if last_month_col:
-                cols_out += [last_month_col]
+            html.append(f"<th class='right'>Último mês<span class='hdrsub'>{last_month_col}</span></th>")
 
         if variacao_col:
-            if "SINAL" in df_view.columns:
-                cols_out += ["SINAL", variacao_col]
-            else:
-                cols_out += [variacao_col]
+            html.append(f"<th class='right'>Variação final<span class='hdrsub'>{variacao_col}</span></th>")
 
-        df_view = df_view[cols_out].copy()
+        html.append("</tr></thead><tbody>")
 
-        # Ordenação por maior impacto (abs da variação final)
-        if ordenar_impacto and variacao_col and variacao_col in df_view.columns:
-            df_view["__abs_var"] = pd.to_numeric(df_view[variacao_col], errors="coerce").abs()
-            df_view = df_view.sort_values("__abs_var", ascending=False).drop(columns=["__abs_var"])
+        for i, r in df_f.reset_index(drop=True).iterrows():
+            obra = str(r.get("OBRA", "")).strip()
 
-        # Configuração de colunas (sparkline + moeda)
-        col_cfg = {
-            "TENDÊNCIA (período)": st.column_config.LineChartColumn(
-                "Tendência (período)",
-                help="Linha mês a mês do período selecionado (por obra).",
-                width="medium",
-            )
-        }
+            deltas = r.get("__spark_deltas", [])
+            spark = _sparkline_svg(deltas) if isinstance(deltas, list) and len(deltas) > 0 else "<span class='muted'>Sem Δ no período</span>"
 
-        # Formato moeda (se preferir, pode trocar por fmt_brl via string no seu fmt)
-        money_fmt = "R$ %.2f"
+            lastv = r.get(last_month_col, None) if last_month_col else None
+            varf = r.get(variacao_col, None) if variacao_col else None
+            chip = f"<span class='{_chip_class(varf)} num'>{fmt_func(varf)}</span>" if variacao_col else "—"
 
-        for c in df_view.columns:
-            if _norm_colname(c) == "OBRA" or c in ("TENDÊNCIA (período)", "SINAL"):
-                continue
-            col_cfg[c] = st.column_config.NumberColumn(c, format=money_fmt)
+            html.append("<tr>")
+            html.append(f"<td class='obra'>{obra}</td>")
+            html.append(f"<td>{spark}</td>")
 
-        if "SINAL" in df_view.columns:
-            col_cfg["SINAL"] = st.column_config.TextColumn(" ", width="small")
+            if mostrar_deltas_cols and delta_cols:
+                for dc in delta_cols:
+                    html.append(f"<td class='right num'>{fmt_func(r.get(dc, None))}</td>")
 
-        st.dataframe(
-            df_view,
-            use_container_width=True,
-            hide_index=True,
-            column_config=col_cfg,
-        )
+            if mostrar_meses_cols and sel_month_cols:
+                for mc in sel_month_cols:
+                    html.append(f"<td class='right num'>{fmt_func(r.get(mc, None))}</td>")
+
+            if last_month_col:
+                html.append(f"<td class='right num'>{fmt_func(lastv)}</td>")
+
+            if variacao_col:
+                html.append(f"<td class='right'>{chip}</td>")
+
+            html.append("</tr>")
+
+        html.append("</tbody></table></div></div>")
+
+        st.markdown("#### Visão geral (mais visual)")
+        st.caption("Δ = mês atual − mês anterior. A **Variação final** permanece conforme a planilha.")
+        st.markdown("".join(html), unsafe_allow_html=True)
 
         st.markdown("---")
 
         # =========================
-        # DETALHES (mantém como você já tinha)
+        # DETALHES (Economias/Desvios) - mantém
         # =========================
         st.subheader("Detalhes (Economias e Desvios do mês)")
 
-        obras_opts = df_show["OBRA"].dropna().astype(str).str.strip().tolist()
-        obras_opts = [o for o in obras_opts if o]  # remove vazios
+        obras_opts = sorted([o for o in df_show["OBRA"].dropna().astype(str).tolist() if str(o).strip() != ""])
         obra_sel = st.selectbox(
             "Escolha a obra para ver os detalhes",
             options=obras_opts,
@@ -1087,15 +1193,14 @@ with tab_resumo:
         )
 
         if obra_sel:
-            # abre a planilha da obra
             try:
-                ws_det = wb[obra_sel]  # wb deve existir no seu app (openpyxl workbook)
+                ws_det = wb[obra_sel]
             except Exception:
                 st.error(f"Não encontrei a aba da obra **{obra_sel}** dentro do arquivo.")
             else:
                 df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
 
-                top_cards = 3  # mude para 5 se quiser
+                top_cards = 3
 
                 econ_items = []
                 if df_econ_det is not None and not df_econ_det.empty and "VARIAÇÃO" in df_econ_det.columns:
@@ -1104,8 +1209,8 @@ with tab_resumo:
                     econ_sorted = econ_sorted.dropna(subset=["__v"])
                     econ_sorted["__abs"] = econ_sorted["__v"].abs()
                     econ_sorted = econ_sorted.sort_values("__abs", ascending=False).head(top_cards)
-                    for _, r in econ_sorted.iterrows():
-                        econ_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+                    for _, rr in econ_sorted.iterrows():
+                        econ_items.append((str(rr.get("DESCRIÇÃO", "")).strip(), float(rr.get("__v", 0) or 0)))
 
                 acres_items = []
                 if df_acres_det is not None and not df_acres_det.empty and "VARIAÇÃO" in df_acres_det.columns:
@@ -1114,8 +1219,8 @@ with tab_resumo:
                     acres_sorted = acres_sorted.dropna(subset=["__v"])
                     acres_sorted["__abs"] = acres_sorted["__v"].abs()
                     acres_sorted = acres_sorted.sort_values("__abs", ascending=False).head(top_cards)
-                    for _, r in acres_sorted.iterrows():
-                        acres_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+                    for _, rr in acres_sorted.iterrows():
+                        acres_items.append((str(rr.get("DESCRIÇÃO", "")).strip(), float(rr.get("__v", 0) or 0)))
 
                 econ_rows = build_rows(econ_items, color=PALETTE["good"], prefix="")
                 acres_rows = build_rows(acres_items, color=PALETTE["bad"], prefix="- ")
@@ -1129,3 +1234,4 @@ with tab_resumo:
                     card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]),
                     unsafe_allow_html=True,
                 )
+
