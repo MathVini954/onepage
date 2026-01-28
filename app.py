@@ -1,4 +1,5 @@
 from __future__ import annotations
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 
 import html
 from pathlib import Path
@@ -859,7 +860,9 @@ with tab_resumo:
     else:
         df_show = df_orc_resumo.copy()
 
-        # --- helpers locais ---
+        # ----------------------------
+        # Helpers
+        # ----------------------------
         def _norm_colname(x: str) -> str:
             import unicodedata
             s = "" if x is None else str(x).strip()
@@ -867,133 +870,302 @@ with tab_resumo:
             s = "".join(ch for ch in s if not unicodedata.combining(ch))
             return " ".join(s.upper().split())
 
-        # garante OBRA
+        PT_MON = {
+            "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+            "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
+        }
+
+        def _parse_mes_header(label: str):
+            # aceita "dez/2025", "dez/25", "Dez.25", "dez-2025"
+            s = str(label).strip().lower()
+            s = s.replace(".", "").replace("-", "/")
+            if "/" not in s:
+                return None
+            a, b = s.split("/", 1)
+            a = a.strip()[:3]
+            b = b.strip()
+            if a not in PT_MON:
+                return None
+            try:
+                y = int(b)
+                if y < 100:
+                    y += 2000
+            except Exception:
+                return None
+            return pd.Timestamp(year=y, month=PT_MON[a], day=1)
+
+        # ----------------------------
+        # Detectar colunas
+        # ----------------------------
         if "OBRA" in df_show.columns:
             df_show["OBRA"] = df_show["OBRA"].astype(str).str.strip()
+        else:
+            st.error("A aba ORÇAMENTO_RESUMO precisa ter a coluna **OBRA**.")
+            st.stop()
 
-        # detectar coluna variação
+        # coluna de variação (qualquer uma que contenha VARIA)
         variacao_col = None
         for c in df_show.columns:
             if "VARIA" in _norm_colname(c):
                 variacao_col = c
                 break
 
-        # detectar colunas de mês (tudo que não é OBRA e não é VARIAÇÃO)
+        # colunas de mês (detectadas por parse)
         month_cols = []
+        month_meta = []
         for c in df_show.columns:
-            nc = _norm_colname(c)
-            if nc == "OBRA":
+            if _norm_colname(c) == "OBRA":
                 continue
             if variacao_col is not None and c == variacao_col:
                 continue
-            month_cols.append(c)
+            dt = _parse_mes_header(c)
+            if dt is not None:
+                month_cols.append(c)
+                month_meta.append((c, dt))
 
-        # converte meses + variação pra número
-        for c in month_cols + ([variacao_col] if variacao_col else []):
-            if c is None:
-                continue
+        month_meta.sort(key=lambda x: x[1])
+        month_cols = [c for c, _ in month_meta]
+
+        if not month_cols:
+            st.error("Não encontrei colunas de mês no formato tipo **dez/2025** dentro da ORÇAMENTO_RESUMO.")
+            st.stop()
+
+        # converter para numérico
+        for c in month_cols:
             df_show[c] = pd.to_numeric(df_show[c], errors="coerce")
+        if variacao_col:
+            df_show[variacao_col] = pd.to_numeric(df_show[variacao_col], errors="coerce")
 
-        # pega o "último mês" = última coluna de mês que tem algum valor (na planilha)
+        # último mês com dado (na carteira)
         last_month_col = None
         for c in reversed(month_cols):
             if df_show[c].notna().any():
                 last_month_col = c
                 break
+        if last_month_col is None:
+            last_month_col = month_cols[-1]
 
-        # UI: expandir meses
-        colA, colB = st.columns([1, 2])
+        # ----------------------------
+        # Controles de visualização
+        # ----------------------------
+        colA, colB, colC = st.columns([1, 2, 2])
         with colA:
             expandir = st.toggle("Expandir meses", value=False)
+
         with colB:
-            if last_month_col:
-                st.caption(f"Padrão: exibindo **{last_month_col}** + **{variacao_col or 'VARIAÇÃO'}**")
+            # filtro de período (só aparece quando expandir)
+            labels = [c for c in month_cols]
+            if expandir:
+                default_start = labels[max(0, len(labels) - 6)]
+                default_end = labels[-1]
+                periodo = st.select_slider(
+                    "Período",
+                    options=labels,
+                    value=(default_start, default_end),
+                )
+                start_label, end_label = periodo
+            else:
+                start_label, end_label = last_month_col, last_month_col
 
-        # montar dataframe pra exibir
-        cols_base = ["OBRA"]
-        if expandir:
-            cols_base += month_cols
-        else:
-            if last_month_col:
-                cols_base += [last_month_col]
+        with colC:
+            st.caption(f"Padrão: exibindo **{end_label}**" + (f" + **{variacao_col}**" if variacao_col else ""))
+
+        # recorte de meses pelo período
+        start_idx = month_cols.index(start_label)
+        end_idx = month_cols.index(end_label)
+        if start_idx > end_idx:
+            start_idx, end_idx = end_idx, start_idx
+        months_in_range = month_cols[start_idx : end_idx + 1]
+
+        # ----------------------------
+        # Montar tabela principal
+        # ----------------------------
+        cols_view = ["OBRA"] + months_in_range + ([variacao_col] if variacao_col else [])
+        df_view = df_show[cols_view].copy()
+
+        # ----------------------------
+        # Linhas “profissionais” no final: TOTAL e Δ M/M
+        # ----------------------------
+        total_row = {"OBRA": "TOTAL (CARTEIRA)"}
+        for m in months_in_range:
+            total_row[m] = float(pd.to_numeric(df_show[m], errors="coerce").fillna(0).sum())
+
+        # Δ mês a mês = total(mês) - total(mês anterior)
+        delta_row = {"OBRA": "Δ MÊS/MÊS (CARTEIRA)"}
+        prev = None
+        for m in months_in_range:
+            cur = total_row.get(m)
+            if prev is None:
+                delta_row[m] = None
+            else:
+                delta_row[m] = (cur - prev) if (cur is not None and prev is not None) else None
+            prev = cur
+
+        # (opcional) variação final da carteira no período (último - primeiro)
         if variacao_col:
-            cols_base += [variacao_col]
+            try:
+                first_m = months_in_range[0]
+                last_m = months_in_range[-1]
+                total_var = (total_row[last_m] - total_row[first_m]) if (total_row[last_m] is not None and total_row[first_m] is not None) else None
+                total_row[variacao_col] = total_var
+                delta_row[variacao_col] = None
+            except Exception:
+                pass
 
-        df_view = df_show[cols_base].copy()
+        df_view = pd.concat([df_view, pd.DataFrame([total_row, delta_row])], ignore_index=True)
 
-        # estilo variação (vibrante)
-        def style_variacao(s: pd.Series):
-            v = pd.to_numeric(s, errors="coerce")
-            out = []
-            for x in v:
-                if pd.isna(x):
-                    out.append("")
-                elif x > 0:
-                    out.append("background-color:#ef4444; color:white; font-weight:900;")
-                elif x < 0:
-                    out.append("background-color:#22c55e; color:white; font-weight:900;")
-                else:
-                    out.append("background-color:#94a3b8; color:white; font-weight:900;")
-            return out
+        # ----------------------------
+        # AgGrid: formatação e cores
+        # ----------------------------
+        money_formatter = JsCode("""
+        function(params){
+          if (params.value === null || params.value === undefined || params.value === "") return "";
+          const v = Number(params.value);
+          if (isNaN(v)) return params.value;
+          return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+        }
+        """)
 
-        # formatação BRL
-        fmt_cols = [c for c in df_view.columns if _norm_colname(c) != "OBRA"]
-        fmt_map = {c: fmt_brl for c in fmt_cols}
+        cell_style = JsCode("""
+        function(params){
+          const field = params.colDef.field;
+          const row = (params.data && params.data.OBRA) ? String(params.data.OBRA) : "";
+          const v = params.value;
 
-        styler = df_view.style.format(fmt_map, na_rep="—")
-        if variacao_col and variacao_col in df_view.columns:
-            styler = styler.apply(style_variacao, subset=[variacao_col])
+          // coluna OBRA
+          if (field === "OBRA"){
+            if (row.startsWith("TOTAL")) return {fontWeight: 900};
+            if (row.startsWith("Δ")) return {fontWeight: 900};
+            return {fontWeight: 800};
+          }
 
-        st.dataframe(styler, use_container_width=True, hide_index=True)
+          // vazio
+          if (v === null || v === undefined || v === "") return {};
 
-        st.markdown("---")
+          // linha Δ: cores vibrantes (positivo vermelho, negativo verde)
+          if (row.startsWith("Δ")){
+            const n = Number(v);
+            if (isNaN(n)) return {};
+            if (n > 0) return { backgroundColor: "#ef4444", color: "white", fontWeight: 900 };
+            if (n < 0) return { backgroundColor: "#22c55e", color: "white", fontWeight: 900 };
+            return { backgroundColor: "#94a3b8", color: "white", fontWeight: 900 };
+          }
 
-        # ===== "Clique na variação" (equivalente): selecionar obra para ver detalhes =====
-        st.subheader("Detalhes (Economias e Desvios do mês)")
-        obra_sel = st.selectbox(
-            "Escolha a obra para ver os detalhes",
-            options=[x for x in df_show["OBRA"].dropna().tolist()] if "OBRA" in df_show.columns else [],
-            index=0 if ("OBRA" in df_show.columns and len(df_show["OBRA"].dropna()) > 0) else None,
+          // coluna VARIAÇÃO: cores vibrantes (positivo vermelho, negativo verde)
+          if (field && field.toUpperCase().includes("VARIA")){
+            const n = Number(v);
+            if (isNaN(n)) return {};
+            if (n > 0) return { backgroundColor: "#ef4444", color: "white", fontWeight: 900 };
+            if (n < 0) return { backgroundColor: "#22c55e", color: "white", fontWeight: 900 };
+            return { backgroundColor: "#94a3b8", color: "white", fontWeight: 900 };
+          }
+
+          // TOTAL: destaque leve
+          if (row.startsWith("TOTAL")){
+            return { fontWeight: 900, backgroundColor: "rgba(255,255,255,0.04)" };
+          }
+
+          return {};
+        }
+        """)
+
+        gb = GridOptionsBuilder.from_dataframe(df_view)
+        gb.configure_default_column(
+            resizable=True,
+            sortable=True,
+            filter=True,
+            wrapText=True,
+            autoHeight=True,
+        )
+        gb.configure_grid_options(
+            enableRangeSelection=True,
+            suppressRowClickSelection=False,
+            rowSelection="single",
+            sideBar=True,  # painel de filtros
         )
 
-        if obra_sel:
-            ws_det = wb[obra_sel]
-            df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
+        # OBRA fixa à esquerda
+        gb.configure_column("OBRA", pinned="left", width=180)
 
-            top_cards = 3  # mude para 5 se quiser
-
-            econ_items = []
-            if df_econ_det is not None and not df_econ_det.empty and "VARIAÇÃO" in df_econ_det.columns:
-                econ_sorted = df_econ_det.copy()
-                econ_sorted["__v"] = pd.to_numeric(econ_sorted["VARIAÇÃO"], errors="coerce")
-                econ_sorted = econ_sorted.dropna(subset=["__v"])
-                econ_sorted["__abs"] = econ_sorted["__v"].abs()
-                econ_sorted = econ_sorted.sort_values("__abs", ascending=False).head(top_cards)
-                for _, r in econ_sorted.iterrows():
-                    econ_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
-
-            acres_items = []
-            if df_acres_det is not None and not df_acres_det.empty and "VARIAÇÃO" in df_acres_det.columns:
-                acres_sorted = df_acres_det.copy()
-                acres_sorted["__v"] = pd.to_numeric(acres_sorted["VARIAÇÃO"], errors="coerce")
-                acres_sorted = acres_sorted.dropna(subset=["__v"])
-                acres_sorted["__abs"] = acres_sorted["__v"].abs()
-                acres_sorted = acres_sorted.sort_values("__abs", ascending=False).head(top_cards)
-                for _, r in acres_sorted.iterrows():
-                    acres_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
-
-            econ_rows = build_rows(econ_items, color=PALETTE["good"], prefix="")
-            acres_rows = build_rows(acres_items, color=PALETTE["bad"], prefix="- ")
-
-            st.markdown(
-                card_resumo("PRINCIPAIS ECONOMIAS", "✅", econ_rows, PALETTE["good_border"], PALETTE["good_bg"]),
-                unsafe_allow_html=True,
+        # colunas de mês com formatação e estilo
+        for m in months_in_range:
+            gb.configure_column(
+                m,
+                type=["numericColumn"],
+                valueFormatter=money_formatter,
+                cellStyle=cell_style,
+                width=140,
             )
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-            st.markdown(
-                card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]),
-                unsafe_allow_html=True,
+
+        # variação (se existir)
+        if variacao_col:
+            gb.configure_column(
+                variacao_col,
+                header_name=variacao_col,
+                type=["numericColumn"],
+                valueFormatter=money_formatter,
+                cellStyle=cell_style,
+                width=150,
+                pinned="right",
             )
+
+        grid_options = gb.build()
+
+        grid = AgGrid(
+            df_view,
+            gridOptions=grid_options,
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            allow_unsafe_jscode=True,
+            fit_columns_on_grid_load=False,
+            height=260 if not expandir else 340,
+        )
+
+        # ----------------------------
+        # “Clique na variação” -> seleção da linha -> cards suspensos (estilo print)
+        # ----------------------------
+        selected = grid.get("selected_rows", [])
+        if selected:
+            obra_sel = selected[0].get("OBRA")
+            if obra_sel in obras:  # só abre se for uma obra real (não TOTAL/Δ)
+                with st.expander(f"Detalhes do mês — {obra_sel}", expanded=True):
+                    ws_det = wb[obra_sel]
+                    df_acres_det, df_econ_det = read_acrescimos_economias(ws_det)
+
+                    top_cards = 3  # ou 5
+
+                    econ_items = []
+                    if df_econ_det is not None and not df_econ_det.empty and "VARIAÇÃO" in df_econ_det.columns:
+                        econ_sorted = df_econ_det.copy()
+                        econ_sorted["__v"] = pd.to_numeric(econ_sorted["VARIAÇÃO"], errors="coerce")
+                        econ_sorted = econ_sorted.dropna(subset=["__v"])
+                        econ_sorted["__abs"] = econ_sorted["__v"].abs()
+                        econ_sorted = econ_sorted.sort_values("__abs", ascending=False).head(top_cards)
+                        for _, r in econ_sorted.iterrows():
+                            econ_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+
+                    acres_items = []
+                    if df_acres_det is not None and not df_acres_det.empty and "VARIAÇÃO" in df_acres_det.columns:
+                        acres_sorted = df_acres_det.copy()
+                        acres_sorted["__v"] = pd.to_numeric(acres_sorted["VARIAÇÃO"], errors="coerce")
+                        acres_sorted = acres_sorted.dropna(subset=["__v"])
+                        acres_sorted["__abs"] = acres_sorted["__v"].abs()
+                        acres_sorted = acres_sorted.sort_values("__abs", ascending=False).head(top_cards)
+                        for _, r in acres_sorted.iterrows():
+                            acres_items.append((str(r.get("DESCRIÇÃO", "")).strip(), float(r.get("__v", 0) or 0)))
+
+                    econ_rows = build_rows(econ_items, color=PALETTE["good"], prefix="")
+                    acres_rows = build_rows(acres_items, color=PALETTE["bad"], prefix="- ")
+
+                    st.markdown(
+                        card_resumo("PRINCIPAIS ECONOMIAS", "✅", econ_rows, PALETTE["good_border"], PALETTE["good_bg"]),
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+                    st.markdown(
+                        card_resumo("DESVIOS DO MÊS", "⚠️", acres_rows, PALETTE["bad_border"], PALETTE["bad_bg"]),
+                        unsafe_allow_html=True,
+                    )
+
 
 
 
