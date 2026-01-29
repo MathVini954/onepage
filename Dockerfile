@@ -1,30 +1,30 @@
 FROM python:3.11-slim-bookworm
 
+# Otimização de logs e bytecode
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Instala apenas o essencial
+# Instalação de dependências do sistema
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala dependências
+# Instalação das bibliotecas Python
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copia todo o código e o Excel.xlsm
+# Copia os ficheiros (incluindo o Excel.xlsm)
 COPY . .
 
-# Expõe a porta
-EXPOSE 8501
+# Altere para a porta 8502
+EXPOSE 8502
 
-# Comando de arranque com flags de Headless (para não pedir email) 
-# e de Segurança (CORS/XSRF) para funcionar no Easypanel
+# Comando de arranque atualizado para a porta 8502
 ENTRYPOINT ["streamlit", "run", "app.py", \
-    "--server.port=8501", \
+    "--server.port=8502", \
     "--server.address=0.0.0.0", \
     "--server.headless=true", \
     "--browser.gatherUsageStats=false", \
